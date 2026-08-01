@@ -1,9 +1,7 @@
 import Foundation
 
 public protocol Module: AnyObject, Identifiable {
-    associatedtype ID: Hashable = String
-
-    var id: ID { get }
+    var id: String { get }
     var name: String { get }
     var config: ModuleConfig { get set }
     var state: ModuleState { get }

@@ -15,7 +15,7 @@ public final class Scheduler {
     private let queue = DispatchQueue(label: "com.macxbar.scheduler", qos: .utility)
     private let log = OSLog(subsystem: "com.macxbar.app", category: "scheduler")
 
-    private init() {}
+    public init() {}
 
     deinit {
         invalidateAll()

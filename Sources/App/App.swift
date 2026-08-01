@@ -20,10 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.shared.info("mac-xbar launching")
 
         menuEngine = MenuEngine()
-        menuEngine?.delegate = appDelegate
+        menuEngine?.delegate = self
 
         scheduler = Scheduler()
-        scheduler?.delegate = appDelegate
+        scheduler?.delegate = self
 
         moduleManager = ModuleManager()
         Task {

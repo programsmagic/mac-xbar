@@ -6,9 +6,11 @@ public protocol RendererDelegate: AnyObject {
 }
 
 public final class Renderer {
+    public static let shared = Renderer()
+
     public weak var delegate: RendererDelegate?
 
-    public init() {}
+    private init() {}
 
     public func render(output: ModuleOutput) {
         delegate?.renderer(self, didProduceOutput: output)

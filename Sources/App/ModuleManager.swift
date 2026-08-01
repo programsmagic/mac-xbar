@@ -48,6 +48,12 @@ public final class ModuleManager {
         Logger.shared.info("Executing custom action: \(identifier)")
     }
 
+    public func initialize() async {
+        for (_, module) in modules {
+            try? await module.initialize()
+        }
+    }
+
     public func invalidateAll() {
         lock.lock()
         defer { lock.unlock() }
