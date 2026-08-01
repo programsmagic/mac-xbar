@@ -28,8 +28,8 @@ public final class Scheduler {
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
-            repeating: .now + interval,
-            interval: .seconds(Int64(interval)),
+            deadline: .now(),
+            repeating: .seconds(Int(interval)),
             leeway: .milliseconds(100)
         )
         timer.setEventHandler { [weak self] in
@@ -44,9 +44,9 @@ public final class Scheduler {
         os_log("Scheduled %{public}@ with interval %{public}f", log: log, type: .info, moduleID, interval)
     }
 
-    public func reschedule(moduleID: String, interval: TimeInterval) {
+    public func reschedule(moduleID: String, interval: TimeInterval, action: @escaping () -> Void) {
         guard let _ = timers[moduleID] else { return }
-        schedule(moduleID: moduleID, interval: interval)
+        schedule(moduleID: moduleID, interval: interval, action: action)
     }
 
     public func invalidate(moduleID: String) {
@@ -75,5 +75,9 @@ public final class Scheduler {
 
     public func activeCount() -> Int {
         timers.count
+    }
+
+    public func scheduledModuleIDs() -> [String] {
+        Array(timers.keys)
     }
 }

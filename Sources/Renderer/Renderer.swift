@@ -30,7 +30,7 @@ public final class Renderer {
         for (id, oldItem) in oldMap {
             if newMap[id] == nil {
                 removed.append(id)
-            } else if let newItem = newMap[id], !oldItem.isEqual(newItem) {
+            } else if let newItem = newMap[id], oldItem != newItem {
                 updated.append(newItem)
             }
         }

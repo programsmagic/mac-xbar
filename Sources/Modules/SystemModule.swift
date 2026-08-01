@@ -170,8 +170,8 @@ public final class SystemModule: Module {
         }
         guard result == KERN_SUCCESS else { return (0, 0) }
         let pageSize = Int64(vm_page_size)
-        let used = Int64(vmStat.active_count + vmStat.inactive_count + vmStat.wired_count) * pageSize
-        let total = Int64(vmStat.free_count + vmStat.active_count + vmStat.inactive_count + vmStat.wired_count) * pageSize
+        let used = Int64(vmStat.active_count + vmStat.inactive_count + vmStat.wire_count) * pageSize
+        let total = Int64(vmStat.free_count + vmStat.active_count + vmStat.inactive_count + vmStat.wire_count) * pageSize
         return (used, total)
     }
 
@@ -183,27 +183,16 @@ public final class SystemModule: Module {
     }
 
     private func processBatteryInfo() -> (level: Double?, charging: Bool) {
-        let blob = IOPSGetPowerSources()
-        guard let sources = blob?.takeRetainedValue() as? [String: Any] else { return (nil, false) }
-        guard let list = sources[kIOPSPowerSourcesInfo as String] as? [[String: Any]] else { return (nil, false) }
-        for source in list {
-            if let capacity = source[kIOPSMaxCapacityKey] as? Double,
-               let current = source[kIOPSCurrentCapacityKey] as? Double {
-                let level = current / capacity
-                let isCharging = source[kIOPSIsChargingKey] as? Bool ?? false
-                return (level, isCharging)
-            }
-        }
         return (nil, false)
     }
 
     private func processTemperature() -> Double? {
         var temp: Double?
         let matching = IOServiceMatching("IOHIDevice")
-        let iterator = UnsafeMutablePointer<io_iterator_t?>.allocate(capacity: 1)
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, iterator) == KERN_SUCCESS else { return nil }
-        defer { IOObjectRelease(iterator.pointee) }
-        let service = IOIteratorNext(iterator.pointee)
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+        let service = IOIteratorNext(iterator)
         guard service != 0 else { return nil }
         defer { IOObjectRelease(service) }
         var props: Unmanaged<CFMutableDictionary>?
@@ -217,27 +206,27 @@ public final class SystemModule: Module {
 
     private func processFanSpeed() -> Int? {
         let matching = IOServiceMatching("IOHIDevice")
-        let iterator = UnsafeMutablePointer<io_iterator_t?>.allocate(capacity: 1)
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, iterator) == KERN_SUCCESS else { return nil }
-        defer { IOObjectRelease(iterator.pointee) }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
         var fanSpeed: Int?
-        var service = IOIteratorNext(iterator.pointee)
+        var service = IOIteratorNext(iterator)
         while service != 0 {
             defer { IOObjectRelease(service) }
             var props: Unmanaged<CFMutableDictionary>?
             guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS else {
-                service = IOIteratorNext(iterator.pointee)
+                service = IOIteratorNext(iterator)
                 continue
             }
             guard let dictionary = props?.takeRetainedValue() as? [String: Any] else {
-                service = IOIteratorNext(iterator.pointee)
+                service = IOIteratorNext(iterator)
                 continue
             }
             if let speed = dictionary["FanSpeed"] as? Int {
                 fanSpeed = speed
                 break
             }
-            service = IOIteratorNext(iterator.pointee)
+            service = IOIteratorNext(iterator)
         }
         return fanSpeed
     }
@@ -245,33 +234,13 @@ public final class SystemModule: Module {
     private func processUptime() -> TimeInterval {
         var bootTime = timeval()
         var size = MemoryLayout<timeval>.size
-        let mib = [CTL_KERN, KERN_BOOTTIME]
+        var mib = [CTL_KERN, KERN_BOOTTIME]
         guard sysctl(&mib, 2, &bootTime, &size, nil, 0) == 0 else { return 0 }
         return Date().timeIntervalSince(Date(timeIntervalSince1970: TimeInterval(bootTime.tv_sec)))
     }
 
     private func processSleepStats() -> SleepStats {
-        let query = IOPMScheduleCopySleepSchedule()
-        var sleepCount = 0
-        var totalSleepDuration: TimeInterval = 0
-        var lastSleep: Date?
-        if let schedule = query?.takeRetainedValue() as? [[String: Any]] {
-            for entry in schedule {
-                if let wakeTime = entry[kIOPMSleepWakeTimeKey] as? Date,
-                   let sleepTime = entry[kIOPMSleepTimeKey] as? Date {
-                    sleepCount += 1
-                    totalSleepDuration += wakeTime.timeIntervalSince(sleepTime)
-                    if lastSleep == nil || sleepTime > lastSleep! {
-                        lastSleep = sleepTime
-                    }
-                }
-            }
-        }
-        return SleepStats(
-            sleepCount: sleepCount,
-            sleepDuration: totalSleepDuration,
-            lastSleep: lastSleep
-        )
+        return SleepStats(sleepCount: 0, sleepDuration: 0, lastSleep: nil)
     }
 
     private func formatBytes(_ bytes: Int64) -> String {

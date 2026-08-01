@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 public final class DeveloperModule: Module {
     public let id: ModuleID = "developer"
@@ -108,7 +109,7 @@ public final class DeveloperModule: Module {
                 title: "\(server.name):\(server.port) - \(server.status)",
                 icon: "server.rack",
                 color: server.status == "up" ? "#34C759" : "#FF3B30",
-                order: 4 + status.localServers.firstIndex(where: { $0.name == server.name }) ?? 0
+                order: 4 + (status.localServers.firstIndex(where: { $0.name == server.name }) ?? 0)
             ))
         }
 

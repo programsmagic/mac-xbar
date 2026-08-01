@@ -51,7 +51,6 @@ public final class MenuEngine {
 
     public func setTemplateImage(_ image: NSImage?) {
         statusItem.button?.image = image
-        statusItem.button?.isTemplate = true
     }
 
     private func computeDiff(old: [MenuItem], new: [MenuItem]) -> MenuDiff {
@@ -65,7 +64,7 @@ public final class MenuEngine {
         for (id, oldItem) in oldMap {
             if newMap[id] == nil {
                 removed.append(id)
-            } else if let newItem = newMap[id], !oldItem.isEqual(newItem) {
+            } else if let newItem = newMap[id], oldItem != newItem {
                 updated.append(newItem)
             }
         }

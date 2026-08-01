@@ -1,3 +1,4 @@
+import Foundation
 import os.log
 
 public enum LogLevel: Int, Comparable {

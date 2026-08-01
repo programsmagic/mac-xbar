@@ -51,6 +51,10 @@ public struct PluginOutput: Equatable {
         self.error = error
         self.timestamp = Date()
     }
+
+    public static func == (lhs: PluginOutput, rhs: PluginOutput) -> Bool {
+        lhs.items == rhs.items && lhs.timestamp == rhs.timestamp
+    }
 }
 
 public final class PluginRuntime {
@@ -65,7 +69,7 @@ public final class PluginRuntime {
         return Array(plugins.values)
     }
 
-    public func register<P: Plugin>(_ plugin: P) {
+    public func register<P: Plugin>(_ plugin: P) where P.ID == String {
         lock.lock()
         defer { lock.unlock() }
         plugins[plugin.id] = plugin
@@ -77,7 +81,7 @@ public final class PluginRuntime {
         plugins.removeValue(forKey: id)
     }
 
-    public func plugin(withID id: String) -> any Plugin? {
+    public func plugin(withID id: String) -> (any Plugin)? {
         lock.lock()
         defer { lock.unlock() }
         return plugins[id]
@@ -98,12 +102,12 @@ public final class PluginRuntime {
     }
 
     public func enablePlugin(id: String) {
-        guard let plugin = plugin(withID: id) else { return }
+        guard plugin(withID: id) != nil else { return }
         // Plugin state management
     }
 
     public func disablePlugin(id: String) {
-        guard let plugin = plugin(withID: id) else { return }
+        guard plugin(withID: id) != nil else { return }
         // Plugin state management
     }
 

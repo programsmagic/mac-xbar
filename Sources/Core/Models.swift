@@ -58,7 +58,7 @@ public enum MenuItemAction: Codable, Equatable {
     case none
 }
 
-public struct ModuleOutput: Equatable {
+public struct ModuleOutput {
     public let items: [MenuItem]
     public let timestamp: Timestamp
     public let source: ModuleID

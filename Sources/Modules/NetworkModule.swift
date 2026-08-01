@@ -65,7 +65,17 @@ public final class NetworkModule: Module {
 
     private func collectStatus() async -> NetworkStatus {
         let isConnected = currentPath?.status == .satisfied
-        let interfaceType = currentPath?.availableInterfaces.first?.rawValue ?? "unknown"
+        let interfaceType: String = {
+            guard let iface = currentPath?.availableInterfaces.first else { return "unknown" }
+            switch iface.type {
+            case .wifi: return "wifi"
+            case .cellular: return "cellular"
+            case .wiredEthernet: return "ethernet"
+            case .loopback: return "loopback"
+            case .other: return "other"
+            @unknown default: return "unknown"
+            }
+        }()
         let isVPNActive = currentPath?.isConstrained ?? false
 
         let latency = await measureLatency()

@@ -94,12 +94,12 @@ public final class PerformanceModule {
             Scheduler.shared.invalidateAll()
             os_log("Adaptive polling: all timers paused due to critical memory pressure", log: log, type: .fault)
         case .warning:
-            for (_, timer) in Scheduler.shared.timers {
-                timer.suspend()
+            for moduleID in Scheduler.shared.scheduledModuleIDs() {
+                Scheduler.shared.pause(moduleID: moduleID)
             }
             os_log("Adaptive polling: timers suspended due to warning memory pressure", log: log, type: .fault)
         case .normal:
-            for (moduleID, _) in Scheduler.shared.timers {
+            for moduleID in Scheduler.shared.scheduledModuleIDs() {
                 Scheduler.shared.resume(moduleID: moduleID)
             }
             os_log("Adaptive polling: timers resumed", log: log, type: .info)
@@ -151,8 +151,14 @@ public final class PerformanceModule {
     }
 
     private func getEnergyImpact() -> Double {
-        let process = ProcessInfo.processInfo
-        return process.energyImpact
+        let thermalState = ProcessInfo.processInfo.thermalState
+        switch thermalState {
+        case .critical: return 1.0
+        case .serious: return 0.75
+        case .fair: return 0.5
+        case .nominal: return 0.25
+        @unknown default: return 0.0
+        }
     }
 
     private func getMemoryPressure() -> MemoryPressureLevel {

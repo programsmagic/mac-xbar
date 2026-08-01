@@ -8,26 +8,17 @@ public struct PreferencesView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Section("Appearance") {
-                Picker("Theme", selection: Binding(
-                    get: { prefs.preferences.theme },
-                    set: { prefs.update { $0.theme = $0 } }
-                )) {
+                Picker("Theme", selection: $prefs.preferences.theme) {
                     ForEach(Theme.allCases, id: \.self) { theme in
                         Text(theme.rawValue.capitalized).tag(theme)
                     }
                 }
 
-                Toggle("Compact Mode", isOn: Binding(
-                    get: { prefs.preferences.compactMode },
-                    set: { prefs.update { $0.compactMode = $0 } }
-                ))
+                Toggle("Compact Mode", isOn: $prefs.preferences.compactMode)
             }
 
             Section("Modules") {
-                Toggle("Show Disabled Modules", isOn: Binding(
-                    get: { prefs.preferences.showDisabledModules },
-                    set: { prefs.update { $0.showDisabledModules = $0 } }
-                ))
+                Toggle("Show Disabled Modules", isOn: $prefs.preferences.showDisabledModules)
 
                 ForEach(prefs.preferences.moduleConfigs) { config in
                     ModuleConfigRow(config: config)
@@ -46,15 +37,9 @@ public struct PreferencesView: View {
                     .frame(width: 80)
                 }
 
-                Toggle("Launch at Login", isOn: Binding(
-                    get: { prefs.preferences.launchAtLogin },
-                    set: { prefs.update { $0.launchAtLogin = $0 } }
-                ))
+                Toggle("Launch at Login", isOn: $prefs.preferences.launchAtLogin)
 
-                Toggle("Analytics", isOn: Binding(
-                    get: { prefs.preferences.analyticsEnabled },
-                    set: { prefs.update { $0.analyticsEnabled = $0 } }
-                ))
+                Toggle("Analytics", isOn: $prefs.preferences.analyticsEnabled)
             }
         }
         .frame(width: 400)
@@ -69,10 +54,7 @@ private struct ModuleConfigRow: View {
         HStack {
             Text(config.name)
             Spacer()
-            Toggle("Enabled", isOn: Binding(
-                get: { config.enabled },
-                set: { _ in }
-            ))
+            Toggle("Enabled", isOn: .constant(config.enabled))
         }
     }
 }

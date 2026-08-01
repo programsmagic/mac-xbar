@@ -1,12 +1,13 @@
 import Foundation
+import SwiftUI
 
-public final class PreferencesManager {
+public final class PreferencesManager: ObservableObject {
     public static let shared = PreferencesManager()
 
     private let storage = Storage.shared
     private let preferencesKey = "preferences"
 
-    public private(set) var preferences: AppPreferences {
+    @Published public private(set) var preferences: AppPreferences {
         didSet {
             try? save()
         }

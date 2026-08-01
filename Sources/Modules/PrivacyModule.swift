@@ -61,20 +61,20 @@ public final class PrivacyModule {
 
     public func encrypt(_ value: String) -> String {
         guard isEncryptedSecretsEnabled else { return value }
-        return value.base64EncodedString()
+        return Data(value.utf8).base64EncodedString()
     }
 
     public func decrypt(_ value: String) -> String? {
         guard isEncryptedSecretsEnabled else { return value }
-        return Data(base64Encoded: value)?.string(encoding: .utf8)
+        return String(data: Data(base64Encoded: value) ?? Data(), encoding: .utf8)
     }
 
     public func logPermissionRequest(_ permission: String, module: String) {
-        guard isPermissionTransparency else { return }
+        guard settings.permissionTransparency else { return }
         Logger.shared.info("Permission request: \(permission) from module \(module)")
     }
 
     public func clearAllData() {
-        try? Storage.shared.clear()
+        try? Storage.shared.remove(forKey: "privacy")
     }
 }

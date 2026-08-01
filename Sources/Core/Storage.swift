@@ -1,7 +1,5 @@
 import Foundation
 
-public protocol Storable: Codable {}
-
 public final class Storage {
     public static let shared = Storage()
 
@@ -15,13 +13,13 @@ public final class Storage {
         ensureDirectoryExists()
     }
 
-    public func save<T: Storable>(_ value: T, forKey key: String) throws {
+    public func save<T: Codable>(_ value: T, forKey key: String) throws {
         let url = directory.appendingPathComponent(key + ".json")
         let data = try JSONEncoder().encode(value)
         try data.write(to: url)
     }
 
-    public func load<T: Storable>(_ type: T.Type, forKey key: String) throws -> T? {
+    public func load<T: Codable>(_ type: T.Type, forKey key: String) throws -> T? {
         let url = directory.appendingPathComponent(key + ".json")
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)

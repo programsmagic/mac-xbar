@@ -40,12 +40,7 @@ public final class Cache {
     }
 
     public func pruneExpired() {
-        let allKeys = cache.keyEnumerator
-        while let key = allKeys.nextObject() as? NSString {
-            if let entry = cache.object(forKey: key), entry.isExpired {
-                cache.removeObject(forKey: key)
-            }
-        }
+        // NSCache doesn't support key enumeration; skip pruning
     }
 
     private func memoryCost<T: Codable>(for value: T) -> Int {

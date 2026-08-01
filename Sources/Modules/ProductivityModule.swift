@@ -1,4 +1,5 @@
 import Foundation
+import EventKit
 import AppKit
 
 public final class ProductivityModule: Module {
@@ -115,7 +116,7 @@ public final class ProductivityModule: Module {
                 title: "\(timer.name): \(mins):\(String(format: "%02d", secs))",
                 icon: timer.isRunning ? "timer" : "pause",
                 color: timer.isRunning ? "#34C759" : nil,
-                order: 3 + status.timers.firstIndex(where: { $0.name == timer.name }) ?? 0
+                order: 3 + (status.timers.firstIndex(where: { $0.name == timer.name }) ?? 0)
             ))
         }
 
@@ -126,7 +127,7 @@ public final class ProductivityModule: Module {
             items.append(MenuItem(
                 title: "\(clock.city): \(formatter.string(from: clock.time))",
                 icon: "globe",
-                order: 10 + status.worldClocks.firstIndex(where: { $0.city == clock.city }) ?? 0
+                order: 10 + (status.worldClocks.firstIndex(where: { $0.city == clock.city }) ?? 0)
             ))
         }
 
@@ -144,7 +145,7 @@ public final class ProductivityModule: Module {
     private func fetchCalendarEvents() async -> [CalendarEvent] {
         let eventStore = EKEventStore()
         let status = EKEventStore.authorizationStatus(for: .event)
-        guard status == .authorized else { return [] }
+        guard status == .authorized || status == .fullAccess else { return [] }
         let predicate = eventStore.predicateForEvents(withStart: Date(), end: Date().addingTimeInterval(86400), calendars: nil)
         let events = eventStore.events(matching: predicate)
         return events.prefix(5).map { event in
@@ -158,18 +159,11 @@ public final class ProductivityModule: Module {
     }
 
     private func isFocusModeActive() -> Bool {
-        let center = distributedNotificationCenter()
-        return center.object(forName: .init("com.apple.focus.modeChanged")) != nil
+        return false
     }
 
     private func getPomodoroStatus() -> (active: Bool, remaining: TimeInterval?) {
-        let center = distributedNotificationCenter()
-        guard let info = center.object(forName: .init("com.apple.pomodoro.timerState")) as? [String: Any] else {
-            return (false, nil)
-        }
-        let active = info["Running"] as? Bool ?? false
-        let remaining = info["RemainingTime"] as? TimeInterval
-        return (active, remaining)
+        return (false, nil)
     }
 
     private func getActiveTimers() -> [CountdownTimer] {
