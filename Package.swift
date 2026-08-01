@@ -83,5 +83,9 @@ let package = Package(
             name: "ModulesTests",
             dependencies: ["Modules"]
         ),
+        .testTarget(
+            name: "DiagnosticsTests",
+            dependencies: ["Diagnostics"]
+        ),
     ]
 )
