@@ -23,8 +23,15 @@ public final class SystemModule: Module {
         public let batteryLevel: Double?
         public let batteryCharging: Bool
         public let temperature: Double?
-        public let uptime: TimeInterval
         public let fanSpeed: Int?
+        public let uptime: TimeInterval
+        public let sleepStats: SleepStats
+    }
+
+    public struct SleepStats {
+        public let sleepCount: Int
+        public let sleepDuration: TimeInterval
+        public let lastSleep: Date?
     }
 
     public func initialize() async throws {
@@ -49,6 +56,9 @@ public final class SystemModule: Module {
         let diskInfo = processDiskInfo()
         let batteryInfo = processBatteryInfo()
         let uptime = processUptime()
+        let sleepStats = processSleepStats()
+        let temperature = processTemperature()
+        let fanSpeed = processFanSpeed()
 
         return SystemStatus(
             cpuUsage: cpuUsage,
@@ -58,9 +68,10 @@ public final class SystemModule: Module {
             diskTotal: diskInfo.total,
             batteryLevel: batteryInfo.level,
             batteryCharging: batteryInfo.charging,
-            temperature: nil,
+            temperature: temperature,
+            fanSpeed: fanSpeed,
             uptime: uptime,
-            fanSpeed: nil
+            sleepStats: sleepStats
         )
     }
 
@@ -103,10 +114,33 @@ public final class SystemModule: Module {
             ))
         }
 
+        if let temperature = status.temperature {
+            items.append(MenuItem(
+                title: "Temperature: \(String(format: "%.0f", temperature))°C",
+                icon: "thermometer",
+                color: temperature > 80 ? "#FF3B30" : nil,
+                order: 4
+            ))
+        }
+
+        if let fanSpeed = status.fanSpeed {
+            items.append(MenuItem(
+                title: "Fan: \(fanSpeed) RPM",
+                icon: "fan",
+                order: 5
+            ))
+        }
+
         items.append(MenuItem(
             title: "Uptime: \(formatUptime(status.uptime))",
             icon: "clock",
-            order: 4
+            order: 6
+        ))
+
+        items.append(MenuItem(
+            title: "Sleeps: \(status.sleepStats.sleepCount) | Last: \(status.sleepStats.lastSleep.map { formatDate($0) } ?? "N/A")",
+            icon: "moon",
+            order: 7
         ))
 
         return items
@@ -121,7 +155,6 @@ public final class SystemModule: Module {
             }
         }
         guard result == KERN_SUCCESS else { return 0 }
-
         let total = cpuInfo.cpu_ticks.0 + cpuInfo.cpu_ticks.1 + cpuInfo.cpu_ticks.2 + cpuInfo.cpu_ticks.3
         let idle = cpuInfo.cpu_ticks.3
         return total > 0 ? Double(total - idle) / Double(total) * 100 : 0
@@ -136,7 +169,6 @@ public final class SystemModule: Module {
             }
         }
         guard result == KERN_SUCCESS else { return (0, 0) }
-
         let pageSize = Int64(vm_page_size)
         let used = Int64(vmStat.active_count + vmStat.inactive_count + vmStat.wired_count) * pageSize
         let total = Int64(vmStat.free_count + vmStat.active_count + vmStat.inactive_count + vmStat.wired_count) * pageSize
@@ -154,7 +186,6 @@ public final class SystemModule: Module {
         let blob = IOPSGetPowerSources()
         guard let sources = blob?.takeRetainedValue() as? [String: Any] else { return (nil, false) }
         guard let list = sources[kIOPSPowerSourcesInfo as String] as? [[String: Any]] else { return (nil, false) }
-
         for source in list {
             if let capacity = source[kIOPSMaxCapacityKey] as? Double,
                let current = source[kIOPSCurrentCapacityKey] as? Double {
@@ -166,12 +197,81 @@ public final class SystemModule: Module {
         return (nil, false)
     }
 
+    private func processTemperature() -> Double? {
+        var temp: Double?
+        let matching = IOServiceMatching("IOHIDevice")
+        let iterator = UnsafeMutablePointer<io_iterator_t?>.allocate(capacity: 1)
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator.pointee) }
+        let service = IOIteratorNext(iterator.pointee)
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        var props: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS else { return nil }
+        guard let dictionary = props?.takeRetainedValue() as? [String: Any] else { return nil }
+        if let tempVal = dictionary["Temperature"] as? Double {
+            temp = tempVal
+        }
+        return temp
+    }
+
+    private func processFanSpeed() -> Int? {
+        let matching = IOServiceMatching("IOHIDevice")
+        let iterator = UnsafeMutablePointer<io_iterator_t?>.allocate(capacity: 1)
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator.pointee) }
+        var fanSpeed: Int?
+        var service = IOIteratorNext(iterator.pointee)
+        while service != 0 {
+            defer { IOObjectRelease(service) }
+            var props: Unmanaged<CFMutableDictionary>?
+            guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS else {
+                service = IOIteratorNext(iterator.pointee)
+                continue
+            }
+            guard let dictionary = props?.takeRetainedValue() as? [String: Any] else {
+                service = IOIteratorNext(iterator.pointee)
+                continue
+            }
+            if let speed = dictionary["FanSpeed"] as? Int {
+                fanSpeed = speed
+                break
+            }
+            service = IOIteratorNext(iterator.pointee)
+        }
+        return fanSpeed
+    }
+
     private func processUptime() -> TimeInterval {
         var bootTime = timeval()
         var size = MemoryLayout<timeval>.size
         let mib = [CTL_KERN, KERN_BOOTTIME]
         guard sysctl(&mib, 2, &bootTime, &size, nil, 0) == 0 else { return 0 }
         return Date().timeIntervalSince(Date(timeIntervalSince1970: TimeInterval(bootTime.tv_sec)))
+    }
+
+    private func processSleepStats() -> SleepStats {
+        let query = IOPMScheduleCopySleepSchedule()
+        var sleepCount = 0
+        var totalSleepDuration: TimeInterval = 0
+        var lastSleep: Date?
+        if let schedule = query?.takeRetainedValue() as? [[String: Any]] {
+            for entry in schedule {
+                if let wakeTime = entry[kIOPMSleepWakeTimeKey] as? Date,
+                   let sleepTime = entry[kIOPMSleepTimeKey] as? Date {
+                    sleepCount += 1
+                    totalSleepDuration += wakeTime.timeIntervalSince(sleepTime)
+                    if lastSleep == nil || sleepTime > lastSleep! {
+                        lastSleep = sleepTime
+                    }
+                }
+            }
+        }
+        return SleepStats(
+            sleepCount: sleepCount,
+            sleepDuration: totalSleepDuration,
+            lastSleep: lastSleep
+        )
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -188,5 +288,12 @@ public final class SystemModule: Module {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
     }
 }

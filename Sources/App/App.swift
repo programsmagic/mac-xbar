@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startModules() async {
         guard let manager = moduleManager else { return }
+        registerBuiltInModules(manager: manager)
         for module in manager.registeredModules {
             guard module.config.enabled else { continue }
             do {
@@ -68,6 +69,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Logger.shared.error("Failed to initialize module \(module.id): \(error.localizedDescription)")
             }
         }
+        PerformanceModule.shared.recordStartup()
+    }
+
+    private func registerBuiltInModules(manager: ModuleManager) {
+        manager.register(NetworkModule())
+        manager.register(SystemModule())
+        manager.register(DeveloperModule())
+        manager.register(ProductivityModule())
+        Logger.shared.info("All built-in modules registered")
     }
 }
 
