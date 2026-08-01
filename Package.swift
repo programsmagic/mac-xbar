@@ -3,9 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "mac-xbar",
-    platforms: [
-        .macOS(.v14)
-    ],
     products: [
         .executable(
             name: "mac-xbar",
@@ -24,9 +21,6 @@ let package = Package(
                 .target(name: "Modules"),
                 .target(name: "Preferences"),
                 .target(name: "Diagnostics"),
-            ],
-            resources: [
-                .process("Resources")
             ]
         ),
         .target(
@@ -51,15 +45,7 @@ let package = Package(
         ),
         .target(
             name: "Modules",
-            dependencies: ["Core", "Cache", "Scheduler"],
-            linkerSettings: [
-                .linkedFramework("IOKit"),
-                .linkedFramework("IOKit.pwr_mgt"),
-                .linkedFramework("SystemConfiguration"),
-                .linkedFramework("Network"),
-                .linkedFramework("AppKit"),
-                .linkedFramework("Foundation"),
-            ]
+            dependencies: ["Core", "Cache", "Scheduler"]
         ),
         .target(
             name: "Preferences",
@@ -97,6 +83,5 @@ let package = Package(
             name: "ModulesTests",
             dependencies: ["Modules"]
         ),
-    ],
-    swiftLanguageVersions: [.v6]
+    ]
 )
