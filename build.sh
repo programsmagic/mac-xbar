@@ -15,51 +15,60 @@ SWIFT_FLAGS="$SWIFT_FLAGS -L /Library/Developer/CommandLineTools/Library/Develop
 SRC_FILES=$(find Sources -name "*.swift" | sort)
 TEST_FILES=$(find Tests -name "*.swift" | sort)
 
+check_typecheck() {
+    local label="$1"
+    local files="$2"
+    echo "==> $label"
+    local start_time
+    start_time=$(date +%s%N)
+    local errors
+    errors=$(swiftc -typecheck $SWIFT_FLAGS $files 2>&1 | grep -E "^error:" || true)
+    local end_time
+    end_time=$(date +%s%N)
+    local elapsed=$(( (end_time - start_time) / 1000000 ))
+    if [ -n "$errors" ]; then
+        echo "$errors"
+        echo "   Type-check FAILED in ${elapsed}ms"
+        return 1
+    fi
+    echo "   Type-check passed in ${elapsed}ms"
+}
+
 case "${1:-build}" in
   build)
-    echo "==> Type-checking source files..."
-    start_time=$(date +%s%N)
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    end_time=$(date +%s%N)
-    elapsed=$(( (end_time - start_time) / 1000000 ))
-    echo "   Type-check passed in ${elapsed}ms"
+    check_typecheck "Type-checking source files..." "$SRC_FILES"
     ;;
   test)
-    echo "==> Type-checking test files..."
-    start_time=$(date +%s%N)
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES $TEST_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    end_time=$(date +%s%N)
-    elapsed=$(( (end_time - start_time) / 1000000 ))
-    echo "   Type-check passed in ${elapsed}ms"
+    check_typecheck "Type-checking source + test files..." "$SRC_FILES $TEST_FILES"
     ;;
   all)
-    echo "==> Type-checking source files..."
-    start_time=$(date +%s%N)
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    end_time=$(date +%s%N)
-    elapsed=$(( (end_time - start_time) / 1000000 ))
-    echo "   Source type-check passed in ${elapsed}ms"
+    check_typecheck "Type-checking source files..." "$SRC_FILES"
     echo ""
-    echo "==> Type-checking test files..."
-    start_time=$(date +%s%N)
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES $TEST_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    end_time=$(date +%s%N)
-    elapsed=$(( (end_time - start_time) / 1000000 ))
-    echo "   Test type-check passed in ${elapsed}ms"
+    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES"
     ;;
   ci)
     echo "==> Resolving dependencies..."
-    swift package resolve 2>&1 || echo "   (SPM unavailable, skipping)"
+    if swift package resolve 2>/dev/null; then
+      echo "   Dependencies resolved"
+    else
+      echo "   (SPM unavailable, skipping)"
+    fi
     echo ""
     echo "==> Building (release)..."
-    swift build -c release 2>&1 || echo "   (SPM unavailable, using swiftc type-check only)"
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    echo "   Type-check passed"
+    if swift build -c release 2>/dev/null; then
+      echo "   Build succeeded"
+    else
+      echo "   (SPM unavailable, using swiftc type-check only)"
+    fi
+    check_typecheck "Type-checking source files..." "$SRC_FILES"
     echo ""
     echo "==> Running tests..."
-    swift test 2>&1 || echo "   (SPM unavailable, using swiftc type-check only)"
-    swiftc -typecheck $SWIFT_FLAGS $SRC_FILES $TEST_FILES 2>&1 | grep -E "^error:" && exit 1 || true
-    echo "   Test type-check passed"
+    if swift test 2>/dev/null; then
+      echo "   Tests passed"
+    else
+      echo "   (SPM unavailable, using swiftc type-check only)"
+    fi
+    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES"
     ;;
   *)
     echo "Usage: $0 {build|test|all|ci}"
