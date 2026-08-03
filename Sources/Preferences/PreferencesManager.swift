@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import ServiceManagement
 
 public final class PreferencesManager: ObservableObject {
     public static let shared = PreferencesManager()
@@ -10,6 +11,7 @@ public final class PreferencesManager: ObservableObject {
     @Published public var preferences: AppPreferences {
         didSet {
             try? save()
+            syncLaunchAtLogin()
         }
     }
 
@@ -17,6 +19,7 @@ public final class PreferencesManager: ObservableObject {
 
     private init() {
         self.preferences = (try? storage.load(AppPreferences.self, forKey: preferencesKey)) ?? AppPreferences()
+        syncLaunchAtLogin()
     }
 
     public func update(_ update: (inout AppPreferences) -> Void) {
@@ -50,6 +53,21 @@ public final class PreferencesManager: ObservableObject {
     public func reset() {
         preferences = AppPreferences()
         networkStats = NetworkDisplayStats()
+        syncLaunchAtLogin()
+    }
+
+    private func syncLaunchAtLogin() {
+        if #available(macOS 13.0, *) {
+            do {
+                if preferences.launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                Logger.shared.error("Failed to update launch at login: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func save() throws {

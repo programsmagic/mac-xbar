@@ -41,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         moduleManager?.invalidateAll()
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+
     nonisolated func scheduler(_ scheduler: Scheduler, didFireForModule moduleID: String) {
         Task { @MainActor in
             await refreshModule(moduleID)
