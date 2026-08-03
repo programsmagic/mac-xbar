@@ -310,13 +310,13 @@ public final class NetworkModule: Module {
 
     func formatSpeedShort(_ bytesPerSecond: Double) -> String {
         if bytesPerSecond < 1024 {
-            return String(format: "%.0fB", bytesPerSecond)
+            return String(format: "%4.0fB", bytesPerSecond)
         } else if bytesPerSecond < 1024 * 1024 {
-            return String(format: "%.1fK", bytesPerSecond / 1024)
+            return String(format: "%5.1fK", bytesPerSecond / 1024)
         } else if bytesPerSecond < 1024 * 1024 * 1024 {
-            return String(format: "%.1fM", bytesPerSecond / (1024 * 1024))
+            return String(format: "%5.1fM", bytesPerSecond / (1024 * 1024))
         } else {
-            return String(format: "%.2fG", bytesPerSecond / (1024 * 1024 * 1024))
+            return String(format: "%5.2fG", bytesPerSecond / (1024 * 1024 * 1024))
         }
     }
 

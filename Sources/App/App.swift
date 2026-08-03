@@ -152,7 +152,7 @@ extension AppDelegate: MenuEngineDelegate {
 
 extension AppDelegate: NetworkSpeedObserver {
     nonisolated func networkModule(_ module: NetworkModule, didUpdateSpeed download: Double, upload: Double, downloadFormatted: String, uploadFormatted: String) {
-        let title = "\u{2193}\(downloadFormatted) \u{2191}\(uploadFormatted)"
+        let title = "\u{2193}\(downloadFormatted) \u{00B7} \u{2191}\(uploadFormatted)"
         Task { @MainActor in
             menuEngine?.setTitle(title)
             PreferencesManager.shared.updateNetworkStats(

@@ -121,7 +121,7 @@ public struct AppPreferences: Codable {
         compactMode: Bool = false,
         showArrows: Bool = true,
         showUnits: Bool = true,
-        fixedWidth: Bool = false,
+        fixedWidth: Bool = true,
         showDisabledModules: Bool = false,
         updateInterval: TimeInterval = 1.0,
         launchAtLogin: Bool = false,

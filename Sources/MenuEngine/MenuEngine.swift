@@ -40,9 +40,9 @@ public final class MenuEngine {
 
     private var fontSize: CGFloat {
         switch density {
-        case .compact: return 11
-        case .normal: return 13
-        case .comfortable: return 15
+        case .compact: return 10
+        case .normal: return 12
+        case .comfortable: return 14
         }
     }
 
@@ -176,7 +176,7 @@ public final class MenuEngine {
         guard let button = statusItem.button else { return }
         let titleWidth = button.attributedTitle.size().width
         let iconWidth = button.image?.size.width ?? 0
-        let padding: CGFloat = 16
+        let padding: CGFloat = 12
         let totalWidth = iconWidth + titleWidth + padding
         if totalWidth > titleWidthCache {
             titleWidthCache = totalWidth
