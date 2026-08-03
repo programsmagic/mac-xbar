@@ -34,6 +34,13 @@ public final class NetworkModule: Module {
     private var cachedPublicIP: String?
     private var cachedInterfaceName: String = ""
 
+    private var dlHistory: [Double] = []
+    private var ulHistory: [Double] = []
+    private let maxHistory = 3
+
+    private var smoothedDL: Double = 0
+    private var smoothedUL: Double = 0
+
     public struct BandwidthSample {
         public let uploadSpeed: Double
         public let downloadSpeed: Double
@@ -120,17 +127,25 @@ public final class NetworkModule: Module {
         let dlSpeed = Double(rxDelta) / elapsed
         let ulSpeed = Double(txDelta) / elapsed
 
-        sessionRxBytes += rxDelta
-        sessionTxBytes += txDelta
-
         previousRxBytes = stats.rxBytes
         previousTxBytes = stats.txBytes
         previousSpeedTimestamp = now
 
-        let dlFormatted = formatSpeedShort(dlSpeed)
-        let ulFormatted = formatSpeedShort(ulSpeed)
+        dlHistory.append(dlSpeed)
+        ulHistory.append(ulSpeed)
+        if dlHistory.count > maxHistory { dlHistory.removeFirst() }
+        if ulHistory.count > maxHistory { ulHistory.removeFirst() }
 
-        speedObserver?.networkModule(self, didUpdateSpeed: dlSpeed, upload: ulSpeed, downloadFormatted: dlFormatted, uploadFormatted: ulFormatted)
+        smoothedDL = dlHistory.reduce(0, +) / Double(dlHistory.count)
+        smoothedUL = ulHistory.reduce(0, +) / Double(ulHistory.count)
+
+        sessionRxBytes += rxDelta
+        sessionTxBytes += txDelta
+
+        let dlFormatted = formatSpeedShort(smoothedDL)
+        let ulFormatted = formatSpeedShort(smoothedUL)
+
+        speedObserver?.networkModule(self, didUpdateSpeed: smoothedDL, upload: smoothedUL, downloadFormatted: dlFormatted, uploadFormatted: ulFormatted)
     }
 
     // MARK: - Latency Polling (every 5 seconds)
@@ -309,14 +324,20 @@ public final class NetworkModule: Module {
     }
 
     func formatSpeedShort(_ bytesPerSecond: Double) -> String {
-        if bytesPerSecond < 1024 {
-            return String(format: "%4.0fB", bytesPerSecond)
-        } else if bytesPerSecond < 1024 * 1024 {
-            return String(format: "%5.1fK", bytesPerSecond / 1024)
-        } else if bytesPerSecond < 1024 * 1024 * 1024 {
-            return String(format: "%5.1fM", bytesPerSecond / (1024 * 1024))
+        let speed = bytesPerSecond
+        if speed < 1 {
+            return "0 B"
+        } else if speed < 1024 {
+            return String(format: "%.0f B", speed)
+        } else if speed < 1024 * 1024 {
+            let kb = speed / 1024
+            return kb < 10 ? String(format: "%.1f KB", kb) : String(format: "%.0f KB", kb)
+        } else if speed < 1024 * 1024 * 1024 {
+            let mb = speed / (1024 * 1024)
+            return mb < 10 ? String(format: "%.1f MB", mb) : String(format: "%.0f MB", mb)
         } else {
-            return String(format: "%5.2fG", bytesPerSecond / (1024 * 1024 * 1024))
+            let gb = speed / (1024 * 1024 * 1024)
+            return String(format: "%.2f GB", gb)
         }
     }
 

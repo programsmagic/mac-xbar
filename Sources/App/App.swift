@@ -152,7 +152,9 @@ extension AppDelegate: MenuEngineDelegate {
 
 extension AppDelegate: NetworkSpeedObserver {
     nonisolated func networkModule(_ module: NetworkModule, didUpdateSpeed download: Double, upload: Double, downloadFormatted: String, uploadFormatted: String) {
-        let title = "\u{2193}\(downloadFormatted) \u{00B7} \u{2191}\(uploadFormatted)"
+        let dlShort = AppDelegate.formatBarSpeed(download)
+        let ulShort = AppDelegate.formatBarSpeed(upload)
+        let title = "\u{2193} \(dlShort)  \u{2191} \(ulShort)"
         Task { @MainActor in
             menuEngine?.setTitle(title)
             PreferencesManager.shared.updateNetworkStats(
@@ -162,6 +164,21 @@ extension AppDelegate: NetworkSpeedObserver {
                 isConnected: true
             )
         }
+    }
+
+    nonisolated static func formatBarSpeed(_ bytesPerSecond: Double) -> String {
+        if bytesPerSecond < 1 { return "0" }
+        if bytesPerSecond < 1024 { return String(format: "%.0fB", bytesPerSecond) }
+        if bytesPerSecond < 1024 * 1024 {
+            let v = bytesPerSecond / 1024
+            return v < 10 ? String(format: "%.1fK", v) : String(format: "%.0fK", v)
+        }
+        if bytesPerSecond < 1024 * 1024 * 1024 {
+            let v = bytesPerSecond / (1024 * 1024)
+            return v < 10 ? String(format: "%.1fM", v) : String(format: "%.0fM", v)
+        }
+        let v = bytesPerSecond / (1024 * 1024 * 1024)
+        return String(format: "%.1fG", v)
     }
 }
 
