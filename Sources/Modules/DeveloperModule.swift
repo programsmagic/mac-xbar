@@ -214,9 +214,7 @@ public final class DeveloperModule: Module {
     }
 
     private func fetchClipboardHistory() -> [String] {
-        let pasteboard = NSPasteboard.general
-        guard let items = pasteboard.pasteboardItems else { return [] }
-        return items.compactMap { $0.string(forType: .string) }
+        return []
     }
 
     private func generateUUID() -> String {
