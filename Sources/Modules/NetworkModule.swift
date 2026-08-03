@@ -326,18 +326,18 @@ public final class NetworkModule: Module {
     func formatSpeedShort(_ bytesPerSecond: Double) -> String {
         let speed = bytesPerSecond
         if speed < 1 {
-            return "0 B"
+            return "\u{2014}"
         } else if speed < 1024 {
-            return String(format: "%.0f B", speed)
+            return String(format: "%4.0f B", speed)
         } else if speed < 1024 * 1024 {
             let kb = speed / 1024
-            return kb < 10 ? String(format: "%.1f KB", kb) : String(format: "%.0f KB", kb)
+            return kb < 10 ? String(format: "%5.1f KB", kb) : String(format: "%4.0f KB", kb)
         } else if speed < 1024 * 1024 * 1024 {
             let mb = speed / (1024 * 1024)
-            return mb < 10 ? String(format: "%.1f MB", mb) : String(format: "%.0f MB", mb)
+            return mb < 10 ? String(format: "%5.1f MB", mb) : String(format: "%4.0f MB", mb)
         } else {
             let gb = speed / (1024 * 1024 * 1024)
-            return String(format: "%.2f GB", gb)
+            return String(format: "%4.2f GB", gb)
         }
     }
 

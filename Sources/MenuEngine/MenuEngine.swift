@@ -36,6 +36,7 @@ public final class MenuEngine {
         self.menu.autoenablesItems = false
         self.statusItem.button?.font = speedFont
         self.statusItem.button?.imagePosition = .imageLeading
+        self.statusItem.button?.toolTip = "mac-xbar — Network Speed Monitor"
     }
 
     private var fontSize: CGFloat {
@@ -127,6 +128,10 @@ public final class MenuEngine {
         menu.removeAllItems()
         itemMap.removeAll()
         currentItems = []
+    }
+
+    public func setTooltip(_ text: String) {
+        statusItem.button?.toolTip = text
     }
 
     public func openMenu() {

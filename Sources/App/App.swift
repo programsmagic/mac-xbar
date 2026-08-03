@@ -155,8 +155,10 @@ extension AppDelegate: NetworkSpeedObserver {
         let dlShort = AppDelegate.formatBarSpeed(download)
         let ulShort = AppDelegate.formatBarSpeed(upload)
         let title = "\u{2193} \(dlShort)  \u{2191} \(ulShort)"
+        let tip = "Download: \(downloadFormatted)\nUpload: \(uploadFormatted)"
         Task { @MainActor in
             menuEngine?.setTitle(title)
+            menuEngine?.setTooltip(tip)
             PreferencesManager.shared.updateNetworkStats(
                 downloadSpeed: downloadFormatted,
                 uploadSpeed: uploadFormatted,
@@ -167,18 +169,18 @@ extension AppDelegate: NetworkSpeedObserver {
     }
 
     nonisolated static func formatBarSpeed(_ bytesPerSecond: Double) -> String {
-        if bytesPerSecond < 1 { return "0" }
-        if bytesPerSecond < 1024 { return String(format: "%.0fB", bytesPerSecond) }
+        if bytesPerSecond < 1 { return "\u{2014}" }
+        if bytesPerSecond < 1024 { return String(format: "%4.0fB", bytesPerSecond) }
         if bytesPerSecond < 1024 * 1024 {
             let v = bytesPerSecond / 1024
-            return v < 10 ? String(format: "%.1fK", v) : String(format: "%.0fK", v)
+            return v < 10 ? String(format: "%5.1fK", v) : String(format: "%4.0fK", v)
         }
         if bytesPerSecond < 1024 * 1024 * 1024 {
             let v = bytesPerSecond / (1024 * 1024)
-            return v < 10 ? String(format: "%.1fM", v) : String(format: "%.0fM", v)
+            return v < 10 ? String(format: "%5.1fM", v) : String(format: "%4.0fM", v)
         }
         let v = bytesPerSecond / (1024 * 1024 * 1024)
-        return String(format: "%.1fG", v)
+        return String(format: "%4.1fG", v)
     }
 }
 
