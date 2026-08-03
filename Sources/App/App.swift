@@ -156,7 +156,7 @@ extension AppDelegate: MenuEngineDelegate {
     }
 }
 
-final class SettingsWindow: Scene {
+struct SettingsWindow: Scene {
     var body: some Scene {
         Window("mac-xbar Settings", id: "settings") {
             PreferencesView()
