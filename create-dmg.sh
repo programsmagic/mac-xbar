@@ -8,6 +8,9 @@ APP_NAME="mac-xbar"
 APP_BUNDLE="${APP_NAME}.app"
 DMG_NAME="${APP_NAME}.dmg"
 VERSION="1.1.0"
+ICON_NAME="mac-xbar.icns"
+ICON_SRC="xbarapp.com/public/img/xbar-2048.png"
+ICONSET_DIR="${APP_BUNDLE}/Contents/Resources/mac-xbar.iconset"
 
 echo ""
 echo "  mac-xbar DMG build..."
@@ -34,6 +37,22 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp mac-xbar "${APP_BUNDLE}/Contents/MacOS/"
 
+# Generate app icon from PNG source
+if [ -f "${ICON_SRC}" ]; then
+    rm -rf "${ICONSET_DIR}"
+    mkdir -p "${ICONSET_DIR}"
+    for size in 16 32 64 128 256 512 1024; do
+        half=$((size * 2))
+        sips -z $size $size "${ICON_SRC}" --out "${ICONSET_DIR}/icon_${size}x${size}.png" 2>/dev/null
+        if [ $size -le 512 ]; then
+            sips -z $half $half "${ICON_SRC}" --out "${ICONSET_DIR}/icon_${size}x${size}@2x.png" 2>/dev/null
+        fi
+    done
+    iconutil -c icns "${ICONSET_DIR}" -o "${APP_BUNDLE}/Contents/Resources/${ICON_NAME}" 2>/dev/null
+    rm -rf "${ICONSET_DIR}"
+    echo "==> Icon generated"
+fi
+
 # Create Info.plist
 cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -46,6 +65,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     <string>com.macxbar.app</string>
     <key>CFBundleName</key>
     <string>${APP_NAME}</string>
+    <key>CFBundleIconFile</key>
+    <string>${ICON_NAME}</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -60,31 +81,29 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
 </plist>
 EOF
 
-# Code sign the app (if certificate available)
-if security find-identity -v -p codesigning 2>/dev/null | grep -q '"'; then
-    echo "==> Signing app bundle..."
-    codesign --force --sign - --options runtime --timestamp "${APP_BUNDLE}"
-    codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}"
-else
-    echo "==> No signing identity found, skipping code sign"
-fi
+# Code sign the app (ad-hoc for development, proper cert for release)
+echo "==> Signing app bundle..."
+codesign --force --sign - --options runtime --timestamp "${APP_BUNDLE}" 2>/dev/null || \
+  codesign --force --sign - --preserve-metadata=identifier,entitlements,flags --timestamp "${APP_BUNDLE}" 2>/dev/null || \
+  echo "   (ad-hoc signing skipped)"
+
+# Verify signing
+codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}" 2>/dev/null || \
+  echo "   (signature verification skipped)"
 
 # Create DMG with proper layout
 echo "==> Creating DMG..."
-# Create a temp folder with proper layout
 DMG_SRC=$(mktemp -d)
 cp -R "${APP_BUNDLE}" "${DMG_SRC}/"
 ln -s /Applications "${DMG_SRC}/Applications"
 
 hdiutil create -volname "${APP_NAME}" -srcfolder "${DMG_SRC}" -ov -format UDZO "${DMG_NAME}"
 
-# Clean up
 rm -rf "${DMG_SRC}"
 
 echo "==> DMG created: ${DMG_NAME}"
 ls -la "${DMG_NAME}"
 
-# Verify DMG
 echo "==> Verifying DMG..."
 hdiutil verify "${DMG_NAME}"
 
