@@ -1,6 +1,6 @@
 import Foundation
 import os.log
-import SystemConfiguration
+import Network
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -104,20 +104,18 @@ public final class DiagnosticsCollector {
     }
 
     private static func isNetworkAvailable() -> Bool {
-        var zeroAddress = sockaddr_in()
-        zeroAddress.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        zeroAddress.sin_family = sa_family_t(AF_INET)
-        let defaultRouteReachability = withUnsafePointer(to: &zeroAddress) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                SCNetworkReachabilityCreateWithAddress(nil, $0)
-            }
+        let monitor = NWPathMonitor()
+        var isAvailable = false
+        let semaphore = DispatchSemaphore(value: 0)
+
+        monitor.pathUpdateHandler = { path in
+            isAvailable = path.status == .satisfied
+            semaphore.signal()
         }
-        var flags = SCNetworkReachabilityFlags()
-        guard let reachability = defaultRouteReachability,
-              SCNetworkReachabilityGetFlags(reachability, &flags) else {
-            return false
-        }
-        return flags.contains(.reachable) && !flags.contains(.connectionRequired)
+        monitor.start(queue: DispatchQueue.global())
+        _ = semaphore.wait(timeout: .now() + 2)
+        monitor.cancel()
+        return isAvailable
     }
 
     private static func collectAppInfo() -> [DiagnosticEntry] {

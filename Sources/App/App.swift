@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
     var menuEngine: MenuEngine?
     var scheduler: Scheduler?
     var moduleManager: ModuleManager?
+    private var networkModule: NetworkModule?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.shared.info("mac-xbar launching")
@@ -41,19 +42,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
     }
 
     nonisolated func scheduler(_ scheduler: Scheduler, didFireForModule moduleID: String) {
-        Task { await refreshAllModules() }
+        Task { @MainActor in
+            await refreshModule(moduleID)
+        }
     }
 
     nonisolated func schedulerDidTick(_ scheduler: Scheduler) {
-        Task { await refreshAllModules() }
+        Task { @MainActor in
+            await refreshAllModules()
+        }
     }
 
     private func setupStatusItem() {
         menuEngine?.theme = PreferencesManager.shared.preferences.theme
         menuEngine?.density = PreferencesManager.shared.preferences.density
         menuEngine?.fixedWidth = PreferencesManager.shared.preferences.fixedWidth
+        menuEngine?.setIcon(NSImage(systemSymbolName: "network", accessibilityDescription: nil))
         menuEngine?.setTitle("")
-        menuEngine?.setIcon(NSImage(systemSymbolName: "terminal", accessibilityDescription: nil))
     }
 
     private func syncPreferences() {
@@ -70,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
             guard module.config.enabled else { continue }
             do {
                 try await module.initialize()
+                if let net = module as? NetworkModule {
+                    networkModule = net
+                    net.speedObserver = self
+                }
                 scheduler?.schedule(
                     moduleID: module.id,
                     interval: module.config.refreshInterval
@@ -98,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         Logger.shared.info("All built-in modules registered")
     }
 }
+
+// MARK: - MenuEngineDelegate
 
 @MainActor
 extension AppDelegate: MenuEngineDelegate {
@@ -135,40 +146,57 @@ extension AppDelegate: MenuEngineDelegate {
             break
         }
     }
+}
 
+// MARK: - NetworkSpeedObserver
+
+extension AppDelegate: NetworkSpeedObserver {
+    nonisolated func networkModule(_ module: NetworkModule, didUpdateSpeed download: Double, upload: Double, downloadFormatted: String, uploadFormatted: String) {
+        let title = "\u{2193}\(downloadFormatted) \u{2191}\(uploadFormatted)"
+        Task { @MainActor in
+            menuEngine?.setTitle(title)
+            PreferencesManager.shared.updateNetworkStats(
+                downloadSpeed: downloadFormatted,
+                uploadSpeed: uploadFormatted,
+                interface: "",
+                isConnected: true
+            )
+        }
+    }
+}
+
+// MARK: - Module Refresh
+
+extension AppDelegate {
     private func refreshAllModules() async {
         guard let manager = moduleManager else { return }
-        var networkSpeed: (download: String, upload: String)?
+        var allItems: [MenuItem] = []
+
         for module in manager.registeredModules {
             guard module.config.enabled else { continue }
             do {
                 let output = try await module.refresh()
                 Renderer.shared.render(output: output)
-                if module.id == "network" {
-                    networkSpeed = extractNetworkSpeed(from: output.items)
-                }
+                allItems.append(contentsOf: output.items)
             } catch {
                 Renderer.shared.render(error: error, for: module.id)
             }
         }
-        if let speed = networkSpeed {
-            menuEngine?.setTitle("↓\(speed.download) ↑\(speed.upload)")
-        }
-        menuEngine?.update(items: await collectAllMenuItems())
+
+        menuEngine?.update(items: allItems.sorted { $0.order < $1.order })
     }
 
-    private func extractNetworkSpeed(from items: [MenuItem]) -> (String, String)? {
-        var download: String?
-        var upload: String?
-        for item in items {
-            if item.title.hasPrefix("↓") {
-                download = item.title.dropFirst().trimmingCharacters(in: .whitespaces)
-            } else if item.title.hasPrefix("↑") {
-                upload = item.title.dropFirst().trimmingCharacters(in: .whitespaces)
-            }
+    private func refreshModule(_ moduleID: String) async {
+        guard let manager = moduleManager,
+              let module = manager.registeredModules.first(where: { $0.id == moduleID }),
+              module.config.enabled else { return }
+        do {
+            let output = try await module.refresh()
+            Renderer.shared.render(output: output)
+            menuEngine?.update(items: await collectAllMenuItems())
+        } catch {
+            Renderer.shared.render(error: error, for: moduleID)
         }
-        guard let dl = download, let ul = upload else { return nil }
-        return (dl, ul)
     }
 
     private func collectAllMenuItems() async -> [MenuItem] {
@@ -187,12 +215,14 @@ extension AppDelegate: MenuEngineDelegate {
     }
 }
 
+// MARK: - Settings Window
+
 struct SettingsWindow: Scene {
     var body: some Scene {
         Window("mac-xbar Settings", id: "settings") {
             PreferencesView()
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 400, height: 500)
+        .defaultSize(width: 420, height: 600)
     }
 }

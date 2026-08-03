@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@preconcurrency
 public protocol MenuEngineDelegate: AnyObject {
     func menuEngine(_ engine: MenuEngine, didSelectItem item: MenuItem)
     func menuEngineWillOpen(_ engine: MenuEngine)
@@ -17,8 +18,12 @@ public final class MenuEngine {
 
     public var isMenuOpen: Bool = false
     public var compactMode: Bool = false
-    public var theme: Theme = .system
-    public var density: Density = .compact
+    public var theme: Theme = .system {
+        didSet { applyTheme() }
+    }
+    public var density: Density = .compact {
+        didSet { applyDensity() }
+    }
     public var fixedWidth: Bool = false
     public var showArrows: Bool = true
     public var showUnits: Bool = true
@@ -29,7 +34,8 @@ public final class MenuEngine {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.menu = NSMenu(title: "mac-xbar")
         self.menu.autoenablesItems = false
-        self.statusItem.button?.font = NSFont.systemFont(ofSize: fontSize)
+        self.statusItem.button?.font = speedFont
+        self.statusItem.button?.imagePosition = .imageLeading
     }
 
     private var fontSize: CGFloat {
@@ -40,8 +46,12 @@ public final class MenuEngine {
         }
     }
 
+    private var speedFont: NSFont {
+        NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
+    }
+
     private var itemFont: NSFont {
-        NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        NSFont.systemFont(ofSize: fontSize, weight: .regular)
     }
 
     private var labelFont: NSFont {
@@ -49,7 +59,7 @@ public final class MenuEngine {
     }
 
     public var title: String {
-        get { statusItem.button?.title ?? "" }
+        get { statusItem.button?.attributedTitle.string ?? "" }
         set { setTitle(newValue) }
     }
 
@@ -57,6 +67,8 @@ public final class MenuEngine {
         get { statusItem.button?.image }
         set { statusItem.button?.image = newValue }
     }
+
+    // MARK: - Public API
 
     public func update(items: [MenuItem]) {
         let newItems = items.sorted { $0.order < $1.order }
@@ -68,23 +80,34 @@ public final class MenuEngine {
 
     public func setTitle(_ title: String) {
         guard let button = statusItem.button else { return }
-        let attributed = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: labelFont,
-                .foregroundColor: resolvedLabelColor,
-            ]
-        )
-        button.attributedTitle = attributed
+        if title.isEmpty {
+            button.attributedTitle = NSAttributedString(string: " ", attributes: [.font: speedFont])
+        } else {
+            let newAttributed = NSAttributedString(
+                string: title,
+                attributes: [
+                    .font: speedFont,
+                    .foregroundColor: resolvedLabelColor,
+                ]
+            )
+            guard button.attributedTitle.string != title else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                context.allowsImplicitAnimation = true
+                button.animator().attributedTitle = newAttributed
+            }
+        }
         stabilizeWidth()
     }
 
     public func setIcon(_ image: NSImage?) {
+        image?.isTemplate = true
         statusItem.button?.image = image
         stabilizeWidth()
     }
 
     public func setTemplateImage(_ image: NSImage?) {
+        image?.isTemplate = true
         statusItem.button?.image = image
     }
 
@@ -93,11 +116,42 @@ public final class MenuEngine {
         let attributed = NSAttributedString(
             string: button.attributedTitle.string,
             attributes: [
-                .font: labelFont,
+                .font: speedFont,
                 .foregroundColor: color,
             ]
         )
         button.attributedTitle = attributed
+    }
+
+    public func removeAllItems() {
+        menu.removeAllItems()
+        itemMap.removeAll()
+        currentItems = []
+    }
+
+    public func openMenu() {
+        delegate?.menuEngineWillOpen(self)
+        isMenuOpen = true
+        guard let button = statusItem.button else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
+        isMenuOpen = false
+        delegate?.menuEngineDidClose(self)
+    }
+
+    // MARK: - Theme & Density
+
+    private func applyTheme() {
+        if let title = statusItem.button?.attributedTitle.string, !title.isEmpty, title != " " {
+            setTitle(title)
+        }
+    }
+
+    private func applyDensity() {
+        statusItem.button?.font = speedFont
+        if let title = statusItem.button?.attributedTitle.string, !title.isEmpty, title != " " {
+            setTitle(title)
+        }
+        titleWidthCache = 0
     }
 
     private var resolvedLabelColor: NSColor {
@@ -111,21 +165,26 @@ public final class MenuEngine {
         }
     }
 
+    // MARK: - Width Stabilization
+
     private func stabilizeWidth() {
         guard fixedWidth else {
             statusItem.length = NSStatusItem.variableLength
+            titleWidthCache = 0
             return
         }
         guard let button = statusItem.button else { return }
         let titleWidth = button.attributedTitle.size().width
         let iconWidth = button.image?.size.width ?? 0
-        let padding: CGFloat = 12
+        let padding: CGFloat = 16
         let totalWidth = iconWidth + titleWidth + padding
         if totalWidth > titleWidthCache {
             titleWidthCache = totalWidth
         }
         statusItem.length = titleWidthCache
     }
+
+    // MARK: - Diff Engine
 
     private func computeDiff(old: [MenuItem], new: [MenuItem]) -> MenuDiff {
         let oldMap = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
@@ -153,27 +212,35 @@ public final class MenuEngine {
     }
 
     private func applyDiff(_ diff: MenuDiff) {
-        for id in diff.removed {
-            if let nsItem = itemMap[id] {
-                menu.removeItem(nsItem)
-                itemMap.removeValue(forKey: id)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            context.allowsImplicitAnimation = true
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+
+            for id in diff.removed {
+                if let nsItem = itemMap[id] {
+                    menu.removeItem(nsItem)
+                    itemMap.removeValue(forKey: id)
+                }
             }
-        }
 
-        for item in diff.added {
-            let nsItem = makeNSMenuItem(item)
-            menu.addItem(nsItem)
-            itemMap[item.id] = nsItem
-        }
+            for item in diff.added {
+                let nsItem = makeNSMenuItem(item)
+                menu.addItem(nsItem)
+                itemMap[item.id] = nsItem
+            }
 
-        for item in diff.updated {
-            if let nsItem = itemMap[item.id] {
-                updateNSMenuItem(nsItem, with: item)
+            for item in diff.updated {
+                if let nsItem = itemMap[item.id] {
+                    updateNSMenuItem(nsItem, with: item)
+                }
             }
         }
 
         reorderMenuItems()
     }
+
+    // MARK: - NSMenuItem Factory
 
     private func makeNSMenuItem(_ item: MenuItem) -> NSMenuItem {
         if item.isSeparator {
@@ -192,16 +259,17 @@ public final class MenuEngine {
 
         if let icon = item.icon {
             nsItem.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
+            nsItem.image?.isTemplate = true
         }
 
         if let badge = item.badge {
-            nsItem.attributedTitle = NSAttributedString(
-                string: "\(item.title)  \(badge)",
-                attributes: [.font: itemFont]
-            )
-        }
-
-        if let color = item.color {
+            let attributed = NSMutableAttributedString(string: "\(item.title)  ", attributes: [.font: itemFont])
+            attributed.append(NSAttributedString(string: badge, attributes: [
+                .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .semibold),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+            nsItem.attributedTitle = attributed
+        } else if let color = item.color {
             nsItem.attributedTitle = NSAttributedString(
                 string: item.title,
                 attributes: [
@@ -209,7 +277,7 @@ public final class MenuEngine {
                     .foregroundColor: NSColor(hex: color) ?? resolvedLabelColor,
                 ]
             )
-        } else if item.badge == nil {
+        } else {
             nsItem.attributedTitle = NSAttributedString(
                 string: item.title,
                 attributes: [.font: itemFont]
@@ -236,14 +304,17 @@ public final class MenuEngine {
 
         if let icon = item.icon {
             nsItem.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
+            nsItem.image?.isTemplate = true
         }
 
         if let badge = item.badge {
-            nsItem.attributedTitle = NSAttributedString(
-                string: "\(item.title)  \(badge)",
-                attributes: [.font: itemFont]
-            )
-        } else if item.color != nil {
+            let attributed = NSMutableAttributedString(string: "\(item.title)  ", attributes: [.font: itemFont])
+            attributed.append(NSAttributedString(string: badge, attributes: [
+                .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .semibold),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+            nsItem.attributedTitle = attributed
+        } else if let color = item.color {
             nsItem.attributedTitle = NSAttributedString(
                 string: item.title,
                 attributes: [
@@ -274,22 +345,9 @@ public final class MenuEngine {
         guard let item = currentItems.first(where: { $0.id == itemId }) else { return }
         delegate?.menuEngine(self, didSelectItem: item)
     }
-
-    public func openMenu() {
-        delegate?.menuEngineWillOpen(self)
-        isMenuOpen = true
-        guard let button = statusItem.button else { return }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
-        isMenuOpen = false
-        delegate?.menuEngineDidClose(self)
-    }
-
-    public func removeAllItems() {
-        menu.removeAllItems()
-        itemMap.removeAll()
-        currentItems = []
-    }
 }
+
+// MARK: - MenuDiff
 
 public struct MenuDiff {
     public let removed: [MenuItemID]

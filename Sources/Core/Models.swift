@@ -123,7 +123,7 @@ public struct AppPreferences: Codable {
         showUnits: Bool = true,
         fixedWidth: Bool = false,
         showDisabledModules: Bool = false,
-        updateInterval: TimeInterval = 60.0,
+        updateInterval: TimeInterval = 1.0,
         launchAtLogin: Bool = false,
         analyticsEnabled: Bool = false,
         moduleConfigs: [ModuleConfig] = []
@@ -139,5 +139,36 @@ public struct AppPreferences: Codable {
         self.launchAtLogin = launchAtLogin
         self.analyticsEnabled = analyticsEnabled
         self.moduleConfigs = moduleConfigs
+    }
+}
+
+public struct NetworkDisplayStats {
+    public var downloadSpeed: String
+    public var uploadSpeed: String
+    public var latency: String
+    public var interface: String
+    public var isConnected: Bool
+    public var publicIP: String
+    public var sessionDownloaded: String
+    public var sessionUploaded: String
+
+    public init(
+        downloadSpeed: String = "\u{2014}",
+        uploadSpeed: String = "\u{2014}",
+        latency: String = "\u{2014}",
+        interface: String = "\u{2014}",
+        isConnected: Bool = false,
+        publicIP: String = "\u{2014}",
+        sessionDownloaded: String = "0 B",
+        sessionUploaded: String = "0 B"
+    ) {
+        self.downloadSpeed = downloadSpeed
+        self.uploadSpeed = uploadSpeed
+        self.latency = latency
+        self.interface = interface
+        self.isConnected = isConnected
+        self.publicIP = publicIP
+        self.sessionDownloaded = sessionDownloaded
+        self.sessionUploaded = sessionUploaded
     }
 }

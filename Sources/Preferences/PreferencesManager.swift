@@ -13,6 +13,8 @@ public final class PreferencesManager: ObservableObject {
         }
     }
 
+    @Published public var networkStats = NetworkDisplayStats()
+
     private init() {
         self.preferences = (try? storage.load(AppPreferences.self, forKey: preferencesKey)) ?? AppPreferences()
     }
@@ -23,8 +25,31 @@ public final class PreferencesManager: ObservableObject {
         preferences = prefs
     }
 
+    public func updateNetworkStats(
+        downloadSpeed: String? = nil,
+        uploadSpeed: String? = nil,
+        latency: String? = nil,
+        interface: String? = nil,
+        isConnected: Bool? = nil,
+        publicIP: String? = nil,
+        sessionDownloaded: String? = nil,
+        sessionUploaded: String? = nil
+    ) {
+        var stats = networkStats
+        if let v = downloadSpeed { stats.downloadSpeed = v }
+        if let v = uploadSpeed { stats.uploadSpeed = v }
+        if let v = latency { stats.latency = v }
+        if let v = interface { stats.interface = v }
+        if let v = isConnected { stats.isConnected = v }
+        if let v = publicIP { stats.publicIP = v }
+        if let v = sessionDownloaded { stats.sessionDownloaded = v }
+        if let v = sessionUploaded { stats.sessionUploaded = v }
+        networkStats = stats
+    }
+
     public func reset() {
         preferences = AppPreferences()
+        networkStats = NetworkDisplayStats()
     }
 
     private func save() throws {
