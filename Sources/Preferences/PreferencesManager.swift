@@ -7,7 +7,7 @@ public final class PreferencesManager: ObservableObject {
     private let storage = Storage.shared
     private let preferencesKey = "preferences"
 
-    @Published public private(set) var preferences: AppPreferences {
+    @Published public var preferences: AppPreferences {
         didSet {
             try? save()
         }

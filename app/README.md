@@ -55,8 +55,8 @@ on the stable channel.
 Tag the branch:
 
 ```bash
-git tag -a v0.1.0 -m "release tag."
-git push origin v0.1.0
+git tag -a v1.1.0 -m "release tag."
+git push origin v1.1.0
 ```
 
 ```bash

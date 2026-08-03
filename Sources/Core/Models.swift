@@ -77,10 +77,10 @@ public struct ModuleOutput {
     }
 }
 
-public struct ModuleConfig: Codable {
+public struct ModuleConfig: Codable, Identifiable {
     public let id: ModuleID
     public let name: String
-    public let enabled: Bool
+    public var enabled: Bool
     public let refreshInterval: TimeInterval
     public let order: Int
     public let settings: [String: String]

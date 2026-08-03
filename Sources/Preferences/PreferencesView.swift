@@ -20,7 +20,7 @@ public struct PreferencesView: View {
             Section("Modules") {
                 Toggle("Show Disabled Modules", isOn: $prefs.preferences.showDisabledModules)
 
-                ForEach(prefs.preferences.moduleConfigs) { config in
+                ForEach(prefs.preferences.moduleConfigs, id: \.id) { config in
                     ModuleConfigRow(config: config)
                 }
             }
@@ -31,7 +31,9 @@ public struct PreferencesView: View {
                     Spacer()
                     TextField("60", text: Binding(
                         get: { String(Int(prefs.preferences.updateInterval)) },
-                        set: { prefs.update { $0.updateInterval = Double($0) ?? 60 } }
+                        set: { newValue in
+                        prefs.update { $0.updateInterval = Double(newValue) ?? 60 }
+                    }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)

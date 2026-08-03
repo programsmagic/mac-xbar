@@ -70,13 +70,18 @@ case "${1:-build}" in
     fi
     check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES"
     ;;
+  dmg)
+    echo "==> Building DMG..."
+    bash create-dmg.sh
+    ;;
   *)
-    echo "Usage: $0 {build|test|all|ci}"
+    echo "Usage: $0 {build|test|all|ci|dmg}"
     echo ""
     echo "  build  - Type-check source files only"
     echo "  test   - Type-check source + test files"
     echo "  all    - Type-check everything"
     echo "  ci     - Full CI pipeline (SPM + type-check)"
+    echo "  dmg    - Create release DMG"
     exit 1
     ;;
 esac

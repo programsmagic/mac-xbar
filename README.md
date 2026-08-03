@@ -26,8 +26,24 @@ Built with Swift 6 and AppKit. Zero unnecessary background work. Privacy-first.
 ## Building
 
 ```bash
-swift build
-swift run mac-xbar
+bash build.sh build
+bash build.sh ci
+```
+
+## Releasing
+
+To create a release `.dmg`:
+
+1. Update the version in `Sources/App/Info.plist`, `.github/workflows/build.yml`, and `create-dmg.sh`
+2. Commit and tag: `git tag -a v1.1.0 -m "release v1.1.0"`
+3. Push the tag: `git push origin v1.1.0`
+4. The CI workflow will automatically build, sign, and upload the DMG
+
+Or build locally:
+
+```bash
+bash build.sh build
+bash create-dmg.sh
 ```
 
 ## Project Structure

@@ -11,7 +11,7 @@ struct mac_xbarApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
     var menuEngine: MenuEngine?
     var scheduler: Scheduler?
     var moduleManager: ModuleManager?
@@ -38,6 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.shared.info("mac-xbar terminating")
         scheduler?.invalidateAll()
         moduleManager?.invalidateAll()
+    }
+
+    nonisolated func scheduler(_ scheduler: Scheduler, didFireForModule moduleID: String) {
+        Task { await refreshAllModules() }
+    }
+
+    nonisolated func schedulerDidTick(_ scheduler: Scheduler) {
+        Task { await refreshAllModules() }
     }
 
     private func setupStatusItem() {
@@ -81,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 extension AppDelegate: MenuEngineDelegate {
     func menuEngine(_ engine: MenuEngine, didSelectItem item: MenuItem) {
         guard let action = item.action else { return }
@@ -128,18 +137,22 @@ extension AppDelegate: MenuEngineDelegate {
                 Renderer.shared.render(error: error, for: module.id)
             }
         }
-        menuEngine?.update(items: collectAllMenuItems())
+        menuEngine?.update(items: await collectAllMenuItems())
     }
 
-    private func collectAllMenuItems() -> [MenuItem] {
+    private func collectAllMenuItems() async -> [MenuItem] {
         guard let manager = moduleManager else { return [] }
-        return manager.registeredModules
-            .filter { $0.config.enabled }
-            .flatMap { module in
-                guard let output = try? module.refresh() else { return [] }
-                return output.items
+        var allItems: [MenuItem] = []
+        for module in manager.registeredModules {
+            guard module.config.enabled else { continue }
+            do {
+                let output = try await module.refresh()
+                allItems.append(contentsOf: output.items)
+            } catch {
+                continue
             }
-            .sorted { $0.order < $1.order }
+        }
+        return allItems.sorted { $0.order < $1.order }
     }
 }
 

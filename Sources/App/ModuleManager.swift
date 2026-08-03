@@ -19,7 +19,7 @@ public final class ModuleManager {
         Logger.shared.info("Registered module: \(module.id)")
     }
 
-    public func module(withID id: String) -> any Module? {
+    public func module(withID id: String) -> (any Module)? {
         lock.lock()
         defer { lock.unlock() }
         return modules[id]
@@ -37,7 +37,7 @@ public final class ModuleManager {
         let newState = !module.config.enabled
         module.setEnabled(newState)
         module.config.enabled = newState
-        try? PreferencesManager.shared.update { prefs in
+        PreferencesManager.shared.update { prefs in
             if let index = prefs.moduleConfigs.firstIndex(where: { $0.id == id }) {
                 prefs.moduleConfigs[index].enabled = newState
             }

@@ -1,6 +1,9 @@
 import Foundation
 import os.log
 import SystemConfiguration
+#if canImport(Darwin)
+import Darwin
+#endif
 
 public final class DiagnosticsCollector {
     static let log = OSLog(subsystem: "com.macxbar.app", category: "diagnostics")
@@ -24,7 +27,7 @@ public final class DiagnosticsCollector {
         ))
         entries.append(DiagnosticEntry(
             name: "Architecture",
-            value: ProcessInfo.processInfo.operatingSystemArchitecture.rawValue,
+            value: architectureString(),
             status: .ok
         ))
         entries.append(DiagnosticEntry(
@@ -34,10 +37,21 @@ public final class DiagnosticsCollector {
         ))
         entries.append(DiagnosticEntry(
             name: "Memory (Physical)",
-            value: formatBytes(ProcessInfo.processInfo.physicalMemory),
+            value: formatBytes(Int64(ProcessInfo.processInfo.physicalMemory)),
             status: .ok
         ))
         return entries
+    }
+
+    private static func architectureString() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machine = withUnsafePointer(to: &systemInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(64)) {
+                String(cString: $0)
+            }
+        }
+        return machine
     }
 
     private static func collectMemoryInfo() -> [DiagnosticEntry] {

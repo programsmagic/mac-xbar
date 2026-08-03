@@ -6,15 +6,17 @@ public struct DiagnosticsView: View {
     public init() {}
 
     public var body: some View {
-        List(entries) { entry in
-            HStack {
-                Text(entry.name)
-                    .font(.headline)
-                Spacer()
-                Text(entry.value)
-                    .font(.subheadline)
-                    .foregroundColor(entry.status.color)
-                StatusIndicator(status: entry.status)
+        List {
+            ForEach(entries, id: \.id) { entry in
+                HStack {
+                    Text(entry.name)
+                        .font(.headline)
+                    Spacer()
+                    Text(entry.value)
+                        .font(.subheadline)
+                        .foregroundColor(entry.status.color)
+                    StatusIndicator(status: entry.status)
+                }
             }
         }
         .navigationTitle("Diagnostics")

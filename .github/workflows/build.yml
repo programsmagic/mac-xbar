@@ -36,7 +36,7 @@ jobs:
           path: .build/release/mac-xbar
           retention-days: 30
 
-  dmg:
+dmg:
     runs-on: macos-latest
     needs: build
     if: github.event_name == 'release' && github.event.action == 'created'
@@ -48,47 +48,8 @@ jobs:
       - name: Build release
         run: swift build -c release
 
-      - name: Create app bundle
-        run: |
-          APP_NAME="mac-xbar"
-          APP_BUNDLE="${APP_NAME}.app"
-          mkdir -p "${APP_BUNDLE}/Contents/MacOS"
-          mkdir -p "${APP_BUNDLE}/Contents/Resources"
-          cp .build/release/${APP_NAME} "${APP_BUNDLE}/Contents/MacOS/"
-          cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>${APP_NAME}</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.macxbar.app</string>
-              <key>CFBundleName</key>
-              <string>${APP_NAME}</string>
-              <key>CFBundleVersion</key>
-              <string>1.0.0</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0.0</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>LSUIElement</key>
-              <true/>
-              <key>LSMinimumSystemVersion</key>
-              <string>14.0</string>
-          </dict>
-          </plist>
-          EOF
-          echo "App bundle created: ${APP_BUNDLE}"
-
       - name: Create DMG
-        run: |
-          APP_NAME="mac-xbar"
-          APP_BUNDLE="${APP_NAME}.app"
-          DMG_NAME="${APP_NAME}.dmg"
-          hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_NAME}"
-          echo "DMG created: ${DMG_NAME}"
-          ls -la "${DMG_NAME}"
+        run: bash create-dmg.sh
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -117,44 +78,8 @@ jobs:
       - name: Build release
         run: swift build -c release
 
-      - name: Create app bundle
-        run: |
-          APP_NAME="mac-xbar"
-          APP_BUNDLE="${APP_NAME}.app"
-          mkdir -p "${APP_BUNDLE}/Contents/MacOS"
-          mkdir -p "${APP_BUNDLE}/Contents/Resources"
-          cp .build/release/${APP_NAME} "${APP_BUNDLE}/Contents/MacOS/"
-          cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>${APP_NAME}</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.macxbar.app</string>
-              <key>CFBundleName</key>
-              <string>${APP_NAME}</string>
-              <key>CFBundleVersion</key>
-              <string>1.0.0</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0.0</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>LSUIElement</key>
-              <true/>
-              <key>LSMinimumSystemVersion</key>
-              <string>14.0</string>
-          </dict>
-          </plist>
-          EOF
-
       - name: Create DMG
-        run: |
-          APP_NAME="mac-xbar"
-          APP_BUNDLE="${APP_NAME}.app"
-          DMG_NAME="${APP_NAME}.dmg"
-          hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_NAME}"
+        run: bash create-dmg.sh
 
       - name: Upload release asset
         uses: svenstaro/upload-release-action@v2
