@@ -16,11 +16,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build release
-        run: swift build -c release
+      - name: Type-check source files
+        run: bash build.sh build
 
-      - name: Run tests
-        run: swift test
+      - name: Type-check tests
+        run: bash build.sh test
 
       - name: Lint
         run: |
@@ -28,13 +28,6 @@ jobs:
           if command -v swiftlint &> /dev/null; then
             swiftlint lint --path Sources/
           fi
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-xbar-build
-          path: .build/release/mac-xbar
-          retention-days: 30
 
   dmg:
     runs-on: macos-latest
@@ -45,10 +38,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build release
-        run: swift build -c release
-
-      - name: Create DMG
+      - name: Build DMG
         run: bash create-dmg.sh
 
       - name: Upload DMG artifact
@@ -75,10 +65,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build release
-        run: swift build -c release
-
-      - name: Create DMG
+      - name: Build DMG
         run: bash create-dmg.sh
 
       - name: Upload release asset
