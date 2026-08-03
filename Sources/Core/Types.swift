@@ -17,6 +17,12 @@ public enum Theme: String, Codable, CaseIterable {
     case dark
 }
 
+public enum Density: String, Codable, CaseIterable {
+    case compact
+    case normal
+    case comfortable
+}
+
 public enum ModuleState: Codable {
     case active
     case paused

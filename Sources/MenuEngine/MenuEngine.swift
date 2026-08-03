@@ -17,16 +17,40 @@ public final class MenuEngine {
 
     public var isMenuOpen: Bool = false
     public var compactMode: Bool = false
+    public var theme: Theme = .system
+    public var density: Density = .compact
+    public var fixedWidth: Bool = false
+    public var showArrows: Bool = true
+    public var showUnits: Bool = true
+
+    private var titleWidthCache: CGFloat = 0
 
     public init() {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.menu = NSMenu(title: "mac-xbar")
         self.menu.autoenablesItems = false
+        self.statusItem.button?.font = NSFont.systemFont(ofSize: fontSize)
+    }
+
+    private var fontSize: CGFloat {
+        switch density {
+        case .compact: return 11
+        case .normal: return 13
+        case .comfortable: return 15
+        }
+    }
+
+    private var itemFont: NSFont {
+        NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+    }
+
+    private var labelFont: NSFont {
+        NSFont.systemFont(ofSize: fontSize, weight: .medium)
     }
 
     public var title: String {
         get { statusItem.button?.title ?? "" }
-        set { statusItem.button?.title = newValue }
+        set { setTitle(newValue) }
     }
 
     public var icon: NSImage? {
@@ -39,18 +63,68 @@ public final class MenuEngine {
         let diff = computeDiff(old: currentItems, new: newItems)
         applyDiff(diff)
         currentItems = newItems
+        stabilizeWidth()
     }
 
     public func setTitle(_ title: String) {
-        statusItem.button?.title = title
+        guard let button = statusItem.button else { return }
+        let attributed = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: labelFont,
+                .foregroundColor: resolvedLabelColor,
+            ]
+        )
+        button.attributedTitle = attributed
+        stabilizeWidth()
     }
 
     public func setIcon(_ image: NSImage?) {
         statusItem.button?.image = image
+        stabilizeWidth()
     }
 
     public func setTemplateImage(_ image: NSImage?) {
         statusItem.button?.image = image
+    }
+
+    public func setTitleColor(_ color: NSColor) {
+        guard let button = statusItem.button, !button.attributedTitle.string.isEmpty else { return }
+        let attributed = NSAttributedString(
+            string: button.attributedTitle.string,
+            attributes: [
+                .font: labelFont,
+                .foregroundColor: color,
+            ]
+        )
+        button.attributedTitle = attributed
+    }
+
+    private var resolvedLabelColor: NSColor {
+        switch theme {
+        case .system:
+            return NSColor.labelColor
+        case .light:
+            return NSColor(calibratedWhite: 0.0, alpha: 1.0)
+        case .dark:
+            return NSColor(calibratedWhite: 1.0, alpha: 1.0)
+        }
+    }
+
+    private func stabilizeWidth() {
+        guard fixedWidth else {
+            statusItem.length = NSStatusItem.variableLength
+            return
+        }
+        guard let button = statusItem.button else { return }
+        let titleWidth = button.attributedTitle.size().width
+        let iconWidth = button.image?.size.width ?? 0
+        let padding: CGFloat = 12
+        let totalWidth = iconWidth + titleWidth + padding
+        if totalWidth > titleWidthCache {
+            titleWidthCache = totalWidth
+        }
+        statusItem.length = titleWidthCache
     }
 
     private func computeDiff(old: [MenuItem], new: [MenuItem]) -> MenuDiff {
@@ -123,14 +197,22 @@ public final class MenuEngine {
         if let badge = item.badge {
             nsItem.attributedTitle = NSAttributedString(
                 string: "\(item.title)  \(badge)",
-                attributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)]
+                attributes: [.font: itemFont]
             )
         }
 
         if let color = item.color {
             nsItem.attributedTitle = NSAttributedString(
                 string: item.title,
-                attributes: [.foregroundColor: NSColor(hex: color) ?? .labelColor]
+                attributes: [
+                    .font: itemFont,
+                    .foregroundColor: NSColor(hex: color) ?? resolvedLabelColor,
+                ]
+            )
+        } else if item.badge == nil {
+            nsItem.attributedTitle = NSAttributedString(
+                string: item.title,
+                attributes: [.font: itemFont]
             )
         }
 
@@ -154,6 +236,26 @@ public final class MenuEngine {
 
         if let icon = item.icon {
             nsItem.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
+        }
+
+        if let badge = item.badge {
+            nsItem.attributedTitle = NSAttributedString(
+                string: "\(item.title)  \(badge)",
+                attributes: [.font: itemFont]
+            )
+        } else if item.color != nil {
+            nsItem.attributedTitle = NSAttributedString(
+                string: item.title,
+                attributes: [
+                    .font: itemFont,
+                    .foregroundColor: NSColor(hex: item.color!) ?? resolvedLabelColor,
+                ]
+            )
+        } else {
+            nsItem.attributedTitle = NSAttributedString(
+                string: item.title,
+                attributes: [.font: itemFont]
+            )
         }
     }
 

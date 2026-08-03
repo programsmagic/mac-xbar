@@ -104,7 +104,11 @@ public struct ModuleConfig: Codable, Identifiable {
 
 public struct AppPreferences: Codable {
     public var theme: Theme
+    public var density: Density
     public var compactMode: Bool
+    public var showArrows: Bool
+    public var showUnits: Bool
+    public var fixedWidth: Bool
     public var showDisabledModules: Bool
     public var updateInterval: TimeInterval
     public var launchAtLogin: Bool
@@ -113,7 +117,11 @@ public struct AppPreferences: Codable {
 
     public init(
         theme: Theme = .system,
+        density: Density = .compact,
         compactMode: Bool = false,
+        showArrows: Bool = true,
+        showUnits: Bool = true,
+        fixedWidth: Bool = false,
         showDisabledModules: Bool = false,
         updateInterval: TimeInterval = 60.0,
         launchAtLogin: Bool = false,
@@ -121,7 +129,11 @@ public struct AppPreferences: Codable {
         moduleConfigs: [ModuleConfig] = []
     ) {
         self.theme = theme
+        self.density = density
         self.compactMode = compactMode
+        self.showArrows = showArrows
+        self.showUnits = showUnits
+        self.fixedWidth = fixedWidth
         self.showDisabledModules = showDisabledModules
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin

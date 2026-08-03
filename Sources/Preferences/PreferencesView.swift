@@ -14,7 +14,19 @@ public struct PreferencesView: View {
                     }
                 }
 
+                Picker("Density", selection: $prefs.preferences.density) {
+                    ForEach(Density.allCases, id: \.self) { density in
+                        Text(density.rawValue.capitalized).tag(density)
+                    }
+                }
+
                 Toggle("Compact Mode", isOn: $prefs.preferences.compactMode)
+            }
+
+            Section("Menu Bar") {
+                Toggle("Show Arrows", isOn: $prefs.preferences.showArrows)
+                Toggle("Show Units", isOn: $prefs.preferences.showUnits)
+                Toggle("Fixed Width", isOn: $prefs.preferences.fixedWidth)
             }
 
             Section("Modules") {

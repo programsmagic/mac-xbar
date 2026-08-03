@@ -49,8 +49,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
     }
 
     private func setupStatusItem() {
+        menuEngine?.theme = PreferencesManager.shared.preferences.theme
+        menuEngine?.density = PreferencesManager.shared.preferences.density
+        menuEngine?.fixedWidth = PreferencesManager.shared.preferences.fixedWidth
         menuEngine?.setTitle("")
         menuEngine?.setIcon(NSImage(systemSymbolName: "terminal", accessibilityDescription: nil))
+    }
+
+    private func syncPreferences() {
+        let prefs = PreferencesManager.shared.preferences
+        menuEngine?.theme = prefs.theme
+        menuEngine?.density = prefs.density
+        menuEngine?.fixedWidth = prefs.fixedWidth
     }
 
     private func startModules() async {
