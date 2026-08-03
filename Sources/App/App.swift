@@ -128,16 +128,37 @@ extension AppDelegate: MenuEngineDelegate {
 
     private func refreshAllModules() async {
         guard let manager = moduleManager else { return }
+        var networkSpeed: (download: String, upload: String)?
         for module in manager.registeredModules {
             guard module.config.enabled else { continue }
             do {
                 let output = try await module.refresh()
                 Renderer.shared.render(output: output)
+                if module.id == "network" {
+                    networkSpeed = extractNetworkSpeed(from: output.items)
+                }
             } catch {
                 Renderer.shared.render(error: error, for: module.id)
             }
         }
+        if let speed = networkSpeed {
+            menuEngine?.setTitle("↓\(speed.download) ↑\(speed.upload)")
+        }
         menuEngine?.update(items: await collectAllMenuItems())
+    }
+
+    private func extractNetworkSpeed(from items: [MenuItem]) -> (String, String)? {
+        var download: String?
+        var upload: String?
+        for item in items {
+            if item.title.hasPrefix("↓") {
+                download = item.title.dropFirst().trimmingCharacters(in: .whitespaces)
+            } else if item.title.hasPrefix("↑") {
+                upload = item.title.dropFirst().trimmingCharacters(in: .whitespaces)
+            }
+        }
+        guard let dl = download, let ul = upload else { return nil }
+        return (dl, ul)
     }
 
     private func collectAllMenuItems() async -> [MenuItem] {
