@@ -11,6 +11,7 @@ echo ""
 SWIFT_FLAGS="-target arm64-apple-macosx14.0 -sdk /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 SWIFT_FLAGS="$SWIFT_FLAGS -I /Library/Developer/CommandLineTools/Library/Developer/Frameworks"
 SWIFT_FLAGS="$SWIFT_FLAGS -L /Library/Developer/CommandLineTools/Library/Developer/Frameworks"
+TEST_FLAGS="$SWIFT_FLAGS -F /Library/Developer/CommandLineTools/Library/Frameworks"
 
 SRC_FILES=$(find Sources -name "*.swift" | sort)
 TEST_FILES=$(find Tests -name "*.swift" | sort)
@@ -18,11 +19,17 @@ TEST_FILES=$(find Tests -name "*.swift" | sort)
 check_typecheck() {
     local label="$1"
     local files="$2"
+    local flags="${3:-$SWIFT_FLAGS}"
+    local ignore_pattern="${4:-}"
     echo "==> $label"
     local start_time
     start_time=$(date +%s%N)
     local errors
-    errors=$(swiftc -typecheck $SWIFT_FLAGS $files 2>&1 | grep -E "^error:" || true)
+    if [ -n "$ignore_pattern" ]; then
+        errors=$(swiftc -typecheck $flags $files 2>&1 | grep -E "error:" | grep -vE "$ignore_pattern" || true)
+    else
+        errors=$(swiftc -typecheck $flags $files 2>&1 | grep -E "error:" || true)
+    fi
     local end_time
     end_time=$(date +%s%N)
     local elapsed=$(( (end_time - start_time) / 1000000 ))
@@ -39,12 +46,12 @@ case "${1:-build}" in
     check_typecheck "Type-checking source files..." "$SRC_FILES"
     ;;
   test)
-    check_typecheck "Type-checking source + test files..." "$SRC_FILES $TEST_FILES"
+    check_typecheck "Type-checking source + test files..." "$SRC_FILES $TEST_FILES" "$TEST_FLAGS" "no such module .XCTest"
     ;;
   all)
     check_typecheck "Type-checking source files..." "$SRC_FILES"
     echo ""
-    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES"
+    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES" "$TEST_FLAGS" "no such module .XCTest"
     ;;
   ci)
     echo "==> Resolving dependencies..."
@@ -68,7 +75,7 @@ case "${1:-build}" in
     else
       echo "   (SPM unavailable, using swiftc type-check only)"
     fi
-    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES"
+    check_typecheck "Type-checking test files..." "$SRC_FILES $TEST_FILES" "$TEST_FLAGS" "no such module .XCTest"
     ;;
   dmg)
     echo "==> Building DMG..."

@@ -113,6 +113,13 @@ public struct AppPreferences: Codable {
     public var updateInterval: TimeInterval
     public var launchAtLogin: Bool
     public var analyticsEnabled: Bool
+    public var notificationsEnabled: Bool
+    public var speedAlertEnabled: Bool
+    public var vpnAlertEnabled: Bool
+    public var dailySummaryEnabled: Bool
+    public var automationEnabled: Bool
+    public var shortcutsEnabled: Bool
+    public var webhookURL: String
     public var moduleConfigs: [ModuleConfig]
 
     public init(
@@ -120,12 +127,19 @@ public struct AppPreferences: Codable {
         density: Density = .compact,
         compactMode: Bool = false,
         showArrows: Bool = true,
-        showUnits: Bool = true,
+        showUnits: Bool = false,
         fixedWidth: Bool = true,
         showDisabledModules: Bool = false,
         updateInterval: TimeInterval = 1.0,
         launchAtLogin: Bool = false,
         analyticsEnabled: Bool = false,
+        notificationsEnabled: Bool = true,
+        speedAlertEnabled: Bool = true,
+        vpnAlertEnabled: Bool = true,
+        dailySummaryEnabled: Bool = false,
+        automationEnabled: Bool = false,
+        shortcutsEnabled: Bool = false,
+        webhookURL: String = "",
         moduleConfigs: [ModuleConfig] = []
     ) {
         self.theme = theme
@@ -138,6 +152,13 @@ public struct AppPreferences: Codable {
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
         self.analyticsEnabled = analyticsEnabled
+        self.notificationsEnabled = notificationsEnabled
+        self.speedAlertEnabled = speedAlertEnabled
+        self.vpnAlertEnabled = vpnAlertEnabled
+        self.dailySummaryEnabled = dailySummaryEnabled
+        self.automationEnabled = automationEnabled
+        self.shortcutsEnabled = shortcutsEnabled
+        self.webhookURL = webhookURL
         self.moduleConfigs = moduleConfigs
     }
 }

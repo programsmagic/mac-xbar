@@ -8,9 +8,9 @@ public final class Cache {
 
     private init() {
         self.cache = NSCache<NSString, CacheEntry>()
-        self.defaultTTL = 300.0
-        cache.countLimit = 1000
-        cache.totalCostLimit = 50 * 1024 * 1024 // 50 MB
+        self.defaultTTL = 120.0
+        cache.countLimit = 100
+        cache.totalCostLimit = 5 * 1024 * 1024
     }
 
     public func set<T: Codable>(_ value: T, forKey key: CacheKey, ttl: TimeInterval? = nil) {

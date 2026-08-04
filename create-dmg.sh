@@ -7,7 +7,7 @@ cd "$SCRIPT_DIR"
 APP_NAME="mac-xbar"
 APP_BUNDLE="${APP_NAME}.app"
 DMG_NAME="${APP_NAME}.dmg"
-VERSION="2.0.0"
+VERSION="3.0.0"
 ICON_NAME="mac-xbar.icns"
 ICON_SRC="xbarapp.com/public/img/xbar-2048.png"
 ICONSET_DIR="${APP_BUNDLE}/Contents/Resources/mac-xbar.iconset"
@@ -20,6 +20,7 @@ echo ""
 if [ ! -f "${APP_NAME}" ]; then
     echo "==> Compiling binary..."
     SWIFT_FLAGS="-target arm64-apple-macosx14.0 -sdk /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+    SWIFT_FLAGS="$SWIFT_FLAGS -framework AppKit -framework SwiftUI -framework Network -framework ServiceManagement -framework IOKit"
     SWIFT_FLAGS="$SWIFT_FLAGS -I /Library/Developer/CommandLineTools/Library/Developer/Frameworks"
     SWIFT_FLAGS="$SWIFT_FLAGS -L /Library/Developer/CommandLineTools/Library/Developer/Frameworks"
     SRC_FILES=$(find Sources -name "*.swift" | sort)
@@ -37,8 +38,12 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp mac-xbar "${APP_BUNDLE}/Contents/MacOS/"
 
-# Generate app icon from PNG source
-if [ -f "${ICON_SRC}" ]; then
+# Copy app icon (prefer existing icns, else generate from PNG source)
+if [ -f "mac-xbar.icns" ]; then
+    cp mac-xbar.icns "${APP_BUNDLE}/Contents/Resources/${ICON_NAME}"
+elif [ -f "mac-xbar.app/Contents/Resources/mac-xbar.icns" ]; then
+    cp mac-xbar.app/Contents/Resources/mac-xbar.icns "${APP_BUNDLE}/Contents/Resources/${ICON_NAME}"
+elif [ -f "${ICON_SRC}" ]; then
     rm -rf "${ICONSET_DIR}"
     mkdir -p "${ICONSET_DIR}"
     for size in 16 32 64 128 256 512 1024; do
@@ -51,6 +56,8 @@ if [ -f "${ICON_SRC}" ]; then
     iconutil -c icns "${ICONSET_DIR}" -o "${APP_BUNDLE}/Contents/Resources/${ICON_NAME}" 2>/dev/null
     rm -rf "${ICONSET_DIR}"
     echo "==> Icon generated"
+else
+    echo "==> (no icon source found; skipping icon)"
 fi
 
 # Create Info.plist

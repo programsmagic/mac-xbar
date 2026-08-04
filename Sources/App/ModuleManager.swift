@@ -1,9 +1,8 @@
 import Foundation
 
 public final class ModuleManager {
-    public static let shared = ModuleManager()
-
     private var modules: [String: any Module] = [:]
+    private var lastRefresh: [String: Date] = [:]
     private let lock = NSLock()
 
     public var registeredModules: [any Module] {
@@ -11,6 +10,8 @@ public final class ModuleManager {
         defer { lock.unlock() }
         return Array(modules.values)
     }
+
+    public init() {}
 
     public func register<M: Module>(_ module: M) {
         lock.lock()
@@ -30,22 +31,28 @@ public final class ModuleManager {
         defer { lock.unlock() }
         modules[id]?.invalidate()
         modules.removeValue(forKey: id)
+        lastRefresh.removeValue(forKey: id)
     }
 
-    public func toggleModule(_ id: String) {
+    public func toggleModule(_ id: String, scheduler: Scheduler? = nil) {
         guard let module = module(withID: id) else { return }
         let newState = !module.config.enabled
         module.setEnabled(newState)
         module.config.enabled = newState
+        if let scheduler = scheduler {
+            if newState {
+                scheduler.schedule(moduleID: id, interval: module.config.refreshInterval) { [weak module] in
+                    Task { _ = try await module?.refresh() }
+                }
+            } else {
+                scheduler.invalidate(moduleID: id)
+            }
+        }
         PreferencesManager.shared.update { prefs in
             if let index = prefs.moduleConfigs.firstIndex(where: { $0.id == id }) {
                 prefs.moduleConfigs[index].enabled = newState
             }
         }
-    }
-
-    public func executeCustomAction(_ identifier: String) {
-        Logger.shared.info("Executing custom action: \(identifier)")
     }
 
     public func initialize() async {
@@ -61,17 +68,39 @@ public final class ModuleManager {
             module.invalidate()
         }
         modules.removeAll()
+        lastRefresh.removeAll()
     }
 
-    public func refreshAll() async {
-        for module in registeredModules {
+    public func refreshAll(force: Bool = false) async -> [MenuItem] {
+        var allItems: [MenuItem] = []
+        let now = Date()
+        let modulesCopy = registeredModules
+        for module in modulesCopy {
             guard module.config.enabled else { continue }
+            let due: Bool
+            lock.lock()
+            due = force || now.timeIntervalSince(lastRefresh[module.id] ?? .distantPast) >= module.config.refreshInterval
+            lock.unlock()
+            guard due else { continue }
             do {
                 let output = try await module.refresh()
-                Renderer.shared.render(output: output)
+                allItems.append(contentsOf: output.items)
+                lock.lock()
+                lastRefresh[module.id] = now
+                lock.unlock()
             } catch {
-                Renderer.shared.render(error: error, for: module.id)
+                Logger.shared.error("Failed to refresh module \(module.id): \(error.localizedDescription)")
             }
         }
+        return allItems.sorted { $0.order < $1.order }
+    }
+
+    public func findModule<T: Module>(ofType type: T.Type) -> T? {
+        for module in registeredModules {
+            if let typed = module as? T {
+                return typed
+            }
+        }
+        return nil
     }
 }

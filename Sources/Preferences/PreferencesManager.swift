@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 import ServiceManagement
 
+public extension Notification.Name {
+    static let preferencesChanged = Notification.Name("com.mac-xbar.preferencesChanged")
+}
+
 public final class PreferencesManager: ObservableObject {
     public static let shared = PreferencesManager()
 
@@ -12,6 +16,7 @@ public final class PreferencesManager: ObservableObject {
         didSet {
             try? save()
             syncLaunchAtLogin()
+            NotificationCenter.default.post(name: .preferencesChanged, object: nil)
         }
     }
 

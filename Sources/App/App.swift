@@ -16,9 +16,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
     var scheduler: Scheduler?
     var moduleManager: ModuleManager?
     private var networkModule: NetworkModule?
+    private var adaptiveMode: MenuBarMode = .normal
+    private var lastSpeedUpdate: Date = Date()
+    private var mainRefreshAction: (() -> Void)?
+    private var preferencesObserver: AnyObject?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.shared.info("mac-xbar launching")
+
+        PerformanceModule.shared.recordStartup()
 
         menuEngine = MenuEngine()
         menuEngine?.delegate = self
@@ -27,12 +33,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         scheduler?.delegate = self
 
         moduleManager = ModuleManager()
+        AppDelegate.shared = self
+
+        preferencesObserver = NotificationCenter.default.addObserver(
+            forName: .preferencesChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyPreferences()
+        }
+
         Task {
-            await moduleManager?.initialize()
             await startModules()
         }
 
         setupStatusItem()
+        startUpdateChecker()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -45,36 +61,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         return false
     }
 
+    // MARK: - Scheduler Delegate
+
     nonisolated func scheduler(_ scheduler: Scheduler, didFireForModule moduleID: String) {
         Task { @MainActor in
-            await refreshModule(moduleID)
+            await refreshSingleModule(moduleID)
         }
     }
 
     nonisolated func schedulerDidTick(_ scheduler: Scheduler) {
         Task { @MainActor in
-            await refreshAllModules()
+            await refreshAndDisplay()
         }
     }
 
+    // MARK: - Setup
+
     private func setupStatusItem() {
-        menuEngine?.theme = PreferencesManager.shared.preferences.theme
-        menuEngine?.density = PreferencesManager.shared.preferences.density
-        menuEngine?.fixedWidth = PreferencesManager.shared.preferences.fixedWidth
+        applyPreferences()
         menuEngine?.setIcon(NSImage(systemSymbolName: "network", accessibilityDescription: nil))
-        menuEngine?.setTitle("")
+        menuEngine?.setTitle("\u{2014}")
+        menuEngine?.setTooltip("mac-xbar — Network Speed Monitor")
     }
 
-    private func syncPreferences() {
+    private func applyPreferences() {
         let prefs = PreferencesManager.shared.preferences
         menuEngine?.theme = prefs.theme
         menuEngine?.density = prefs.density
         menuEngine?.fixedWidth = prefs.fixedWidth
+        menuEngine?.showArrows = prefs.showArrows
+        menuEngine?.compactMode = prefs.compactMode
+        if scheduler?.isScheduled("__main__") == true,
+           scheduler?.scheduledModuleIDs().contains("__main__") == true {
+            scheduleMainRefresh()
+        }
+    }
+
+    private func startUpdateChecker() {
+        UpdateChecker.shared.startPeriodicChecks(interval: 3600 * 6)
     }
 
     private func startModules() async {
         guard let manager = moduleManager else { return }
         registerBuiltInModules(manager: manager)
+
         for module in manager.registeredModules {
             guard module.config.enabled else { continue }
             do {
@@ -83,24 +113,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
                     networkModule = net
                     net.speedObserver = self
                 }
-                scheduler?.schedule(
-                    moduleID: module.id,
-                    interval: module.config.refreshInterval
-                ) { [weak module] in
-                    Task {
-                        do {
-                            let output = try await module?.refresh() ?? ModuleOutput(source: module?.id ?? "")
-                            Renderer.shared.render(output: output)
-                        } catch {
-                            Renderer.shared.render(error: error, for: module?.id ?? "")
-                        }
-                    }
-                }
             } catch {
                 Logger.shared.error("Failed to initialize module \(module.id): \(error.localizedDescription)")
             }
         }
-        PerformanceModule.shared.recordStartup()
+
+        mainRefreshAction = { [weak self] in
+            Task { @MainActor in
+                await self?.refreshAndDisplay()
+            }
+        }
+        scheduleMainRefresh()
     }
 
     private func registerBuiltInModules(manager: ModuleManager) {
@@ -108,7 +131,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         manager.register(SystemModule())
         manager.register(DeveloperModule())
         manager.register(ProductivityModule())
+        manager.register(HistoryModule())
+        manager.register(AIModule())
+        manager.register(QuickActionsModule())
+
+        if PreferencesManager.shared.preferences.moduleConfigs.isEmpty {
+            let configs = manager.registeredModules.map {
+                ModuleConfig(
+                    id: $0.id,
+                    name: $0.name,
+                    enabled: $0.config.enabled,
+                    refreshInterval: $0.config.refreshInterval,
+                    order: $0.config.order,
+                    settings: $0.config.settings
+                )
+            }
+            PreferencesManager.shared.update { prefs in
+                prefs.moduleConfigs = configs
+            }
+        }
         Logger.shared.info("All built-in modules registered")
+    }
+
+    private func scheduleMainRefresh() {
+        guard let scheduler, let mainRefreshAction else { return }
+        scheduler.schedule(
+            moduleID: "__main__",
+            interval: PreferencesManager.shared.preferences.updateInterval,
+            leewayMs: 100,
+            action: mainRefreshAction
+        )
+    }
+
+    // MARK: - Refresh
+
+    private func refreshAndDisplay(force: Bool = false) async {
+        guard let manager = moduleManager else { return }
+        let allItems = await manager.refreshAll(force: force)
+        menuEngine?.update(items: allItems)
+    }
+
+    private func refreshSingleModule(_ moduleID: String) async {
+        guard let manager = moduleManager,
+            let module = manager.module(withID: moduleID),
+            module.config.enabled else { return }
+        do {
+            _ = try await module.refresh()
+            await refreshAndDisplay()
+        } catch {
+            Logger.shared.error("Failed to refresh \(moduleID): \(error.localizedDescription)")
+        }
     }
 }
 
@@ -121,9 +193,14 @@ extension AppDelegate: MenuEngineDelegate {
         handleAction(action)
     }
 
+    func menuEngineDidRequestDashboard(_ engine: MenuEngine) {
+        guard let button = engine.statusButton else { return }
+        DashboardPanel.shared.toggle(from: button)
+    }
+
     func menuEngineWillOpen(_ engine: MenuEngine) {
         Task {
-            await refreshAllModules()
+            await refreshAndDisplay(force: true)
         }
     }
 
@@ -141,13 +218,28 @@ extension AppDelegate: MenuEngineDelegate {
             task.arguments = ["-c", command]
             try? task.run()
         case .refresh:
-            Task { await refreshAllModules() }
+            Task { await refreshAndDisplay() }
         case .toggle(let moduleID):
-            moduleManager?.toggleModule(moduleID)
+            moduleManager?.toggleModule(moduleID, scheduler: scheduler)
         case .custom(let identifier):
-            moduleManager?.executeCustomAction(identifier)
+            handleQuickAction(identifier)
         case .none:
             break
+        }
+    }
+
+    private func handleQuickAction(_ identifier: String) {
+        guard let quickActions = moduleManager?.findModule(ofType: QuickActionsModule.self) else {
+            Logger.shared.error("QuickActionsModule not found")
+            return
+        }
+        guard let action = QuickAction(rawValue: identifier) else {
+            Logger.shared.error("Unknown quick action: \(identifier)")
+            return
+        }
+        Task {
+            await quickActions.executeAction(action)
+            await refreshAndDisplay()
         }
     }
 }
@@ -158,18 +250,116 @@ extension AppDelegate: NetworkSpeedObserver {
     nonisolated func networkModule(_ module: NetworkModule, didUpdateSpeed download: Double, upload: Double, downloadFormatted: String, uploadFormatted: String) {
         let dlShort = AppDelegate.formatBarSpeed(download)
         let ulShort = AppDelegate.formatBarSpeed(upload)
-        let title = "\u{2193} \(dlShort)  \u{2191} \(ulShort)"
-        let tip = "Download: \(downloadFormatted)\nUpload: \(uploadFormatted)"
+
+        let intel = module.currentIntelligence()
+        let latency: Double = intel.latency
+        let interface: String = intel.interfaceType
+
         Task { @MainActor in
-            menuEngine?.setTitle(title)
-            menuEngine?.setTooltip(tip)
+            let showUnits = PreferencesManager.shared.preferences.showUnits
+            let dlShortFinal = showUnits
+                ? AppDelegate.barSpeed(download, showUnits: true)
+                : dlShort
+            let ulShortFinal = showUnits
+                ? AppDelegate.barSpeed(upload, showUnits: true)
+                : ulShort
+            if let history = AppDelegate.shared?.moduleManager?.findModule(ofType: HistoryModule.self) {
+                history.recordSample(download: download, upload: upload, latency: latency, interface: interface)
+            }
+
+            if let ai = AppDelegate.shared?.moduleManager?.findModule(ofType: AIModule.self) {
+                ai.analyzeSpeed(download: download, upload: upload, latency: latency, rssi: intel.wifiRSSI)
+            }
+
+            let mode = self.updateAdaptiveMode(download: download, upload: upload)
+            let title = self.formatTitleForMode(mode, dl: dlShortFinal, ul: ulShortFinal, dlFull: downloadFormatted, ulFull: uploadFormatted)
+            let tip = "Download: \(downloadFormatted)\nUpload: \(uploadFormatted)\nMode: \(mode.displayName)"
+
+            self.menuEngine?.setTitle(title)
+            self.menuEngine?.setTooltip(tip)
+
             PreferencesManager.shared.updateNetworkStats(
                 downloadSpeed: downloadFormatted,
                 uploadSpeed: uploadFormatted,
-                interface: "",
-                isConnected: true
+                latency: formatLatency(intel.latency),
+                interface: intel.interfaceType,
+                isConnected: intel.isConnected,
+                publicIP: intel.publicIP
+            )
+            self.lastSpeedUpdate = Date()
+        }
+    }
+
+    private func formatLatency(_ latency: Double) -> String {
+        latency >= 0 ? String(format: "%.0f ms", latency) : "—"
+    }
+
+    nonisolated func networkModule(_ module: NetworkModule, didUpdateIntelligence intelligence: NetworkModule.NetworkIntelligence) {
+        Task { @MainActor in
+            PreferencesManager.shared.updateNetworkStats(
+                downloadSpeed: module.formatSpeedShort(intelligence.download),
+                uploadSpeed: module.formatSpeedShort(intelligence.upload),
+                latency: formatLatency(intelligence.latency),
+                interface: intelligence.interfaceType,
+                isConnected: intelligence.isConnected,
+                publicIP: intelligence.publicIP
             )
         }
+    }
+
+    private func updateAdaptiveMode(download: Double, upload: Double) -> MenuBarMode {
+        let totalSpeed = download + upload
+
+        if totalSpeed < 100 {
+            if Date().timeIntervalSince(lastSpeedUpdate) > 30 {
+                return .idle
+            }
+            return adaptiveMode
+        } else if totalSpeed < 1024 * 1024 {
+            return .light
+        } else if totalSpeed > 10 * 1024 * 1024 {
+            return .streaming
+        } else {
+            return .normal
+        }
+    }
+
+    private func formatTitleForMode(_ mode: MenuBarMode, dl: String, ul: String, dlFull: String, ulFull: String) -> String {
+        let prefs = PreferencesManager.shared.preferences
+        let showArrows = prefs.showArrows
+        let compact = prefs.compactMode
+
+        let dlPart = showArrows ? "\u{2193}\u{00A0}\(dl)" : "\(dl)"
+        let ulPart = showArrows ? "\u{2191}\u{00A0}\(ul)" : "\(ul)"
+
+        switch mode {
+        case .idle:
+            return ""
+        case .light:
+            return compact ? dlPart : "\(dlPart) \(ulPart)"
+        case .normal:
+            return compact ? "\(dlPart) \(ulPart)" : "\(dlPart)  \(ulPart)"
+        case .developer:
+            return "\u{21BB} \(dlPart) \(ulPart)"
+        case .streaming:
+            return "▶ \u{2193}\(dl) \u{2191}\(ul)"
+        }
+    }
+
+    static func barSpeed(_ bytesPerSecond: Double, showUnits: Bool) -> String {
+        showUnits ? formatSpeedBytes(bytesPerSecond) : formatBarSpeed(bytesPerSecond)
+    }
+
+    private static func formatSpeedBytes(_ bytesPerSecond: Double) -> String {
+        if bytesPerSecond < 1 { return "\u{2014}" }
+        if bytesPerSecond < 1024 { return String(format: "%.0f B/s", bytesPerSecond) }
+        if bytesPerSecond < 1024 * 1024 {
+            return String(format: "%.1f KB/s", bytesPerSecond / 1024)
+        }
+        if bytesPerSecond < 1024 * 1024 * 1024 {
+            return String(format: "%.1f MB/s", bytesPerSecond / (1024 * 1024))
+        }
+        return String(format: "%.2f GB/s", bytesPerSecond / (1024 * 1024 * 1024))
     }
 
     nonisolated static func formatBarSpeed(_ bytesPerSecond: Double) -> String {
@@ -188,64 +378,46 @@ extension AppDelegate: NetworkSpeedObserver {
     }
 }
 
-// MARK: - Module Refresh
+// MARK: - Adaptive Mode
+
+enum MenuBarMode: String, CaseIterable {
+    case idle, light, normal, developer, streaming
+
+    var displayName: String {
+        switch self {
+        case .idle: return "Idle"
+        case .light: return "Light"
+        case .normal: return "Normal"
+        case .developer: return "Developer"
+        case .streaming: return "Streaming"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .idle: return "moon.fill"
+        case .light: return "leaf.fill"
+        case .normal: return "gauge.with.dots.needle.33percent"
+        case .developer: return "chevron.left.forwardslash.chevron.right"
+        case .streaming: return "play.fill"
+        }
+    }
+}
+
+// MARK: - AppDelegate Access for Settings
 
 extension AppDelegate {
-    private func refreshAllModules() async {
-        guard let manager = moduleManager else { return }
-        var allItems: [MenuItem] = []
+    static var shared: AppDelegate?
 
-        for module in manager.registeredModules {
-            guard module.config.enabled else { continue }
-            do {
-                let output = try await module.refresh()
-                Renderer.shared.render(output: output)
-                allItems.append(contentsOf: output.items)
-            } catch {
-                Renderer.shared.render(error: error, for: module.id)
-            }
-        }
-
-        menuEngine?.update(items: allItems.sorted { $0.order < $1.order })
-    }
-
-    private func refreshModule(_ moduleID: String) async {
-        guard let manager = moduleManager,
-              let module = manager.registeredModules.first(where: { $0.id == moduleID }),
-              module.config.enabled else { return }
-        do {
-            let output = try await module.refresh()
-            Renderer.shared.render(output: output)
-            menuEngine?.update(items: await collectAllMenuItems())
-        } catch {
-            Renderer.shared.render(error: error, for: moduleID)
-        }
-    }
-
-    private func collectAllMenuItems() async -> [MenuItem] {
-        guard let manager = moduleManager else { return [] }
-        var allItems: [MenuItem] = []
-        for module in manager.registeredModules {
-            guard module.config.enabled else { continue }
-            do {
-                let output = try await module.refresh()
-                allItems.append(contentsOf: output.items)
-            } catch {
-                continue
-            }
-        }
-        return allItems.sorted { $0.order < $1.order }
-    }
+    var theScheduler: Scheduler? { scheduler }
 }
 
 // MARK: - Settings Window
 
 struct SettingsWindow: Scene {
     var body: some Scene {
-        Window("mac-xbar Settings", id: "settings") {
-            PreferencesView()
+        Settings {
+            SettingsView()
         }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 420, height: 600)
     }
 }

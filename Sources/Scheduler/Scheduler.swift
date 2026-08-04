@@ -15,13 +15,20 @@ public final class Scheduler {
     private let queue = DispatchQueue(label: "com.macxbar.scheduler", qos: .utility)
     private let log = OSLog(subsystem: "com.macxbar.app", category: "scheduler")
 
+    public static let defaultLeewayMs: UInt64 = 500
+
     public init() {}
 
     deinit {
         invalidateAll()
     }
 
-    public func schedule(moduleID: String, interval: TimeInterval, action: @escaping () -> Void) {
+    public func schedule(
+        moduleID: String,
+        interval: TimeInterval,
+        leewayMs: UInt64 = Scheduler.defaultLeewayMs,
+        action: @escaping () -> Void
+    ) {
         invalidate(moduleID: moduleID)
 
         guard interval > 0 else { return }
@@ -30,7 +37,7 @@ public final class Scheduler {
         timer.schedule(
             deadline: .now(),
             repeating: .seconds(Int(interval)),
-            leeway: .milliseconds(100)
+            leeway: .milliseconds(Int(leewayMs))
         )
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
@@ -41,11 +48,11 @@ public final class Scheduler {
         timer.resume()
         timers[moduleID] = timer
 
-        os_log("Scheduled %{public}@ with interval %{public}f", log: log, type: .info, moduleID, interval)
+        os_log("Scheduled %{public}@ with interval %{public}f, leeway %{public}dms", log: log, type: .info, moduleID, interval, leewayMs)
     }
 
     public func reschedule(moduleID: String, interval: TimeInterval, action: @escaping () -> Void) {
-        guard let _ = timers[moduleID] else { return }
+        guard timers[moduleID] != nil else { return }
         schedule(moduleID: moduleID, interval: interval, action: action)
     }
 

@@ -6,6 +6,7 @@ public protocol MenuEngineDelegate: AnyObject {
     func menuEngine(_ engine: MenuEngine, didSelectItem item: MenuItem)
     func menuEngineWillOpen(_ engine: MenuEngine)
     func menuEngineDidClose(_ engine: MenuEngine)
+    func menuEngineDidRequestDashboard(_ engine: MenuEngine)
 }
 
 public final class MenuEngine {
@@ -37,6 +38,26 @@ public final class MenuEngine {
         self.statusItem.button?.font = speedFont
         self.statusItem.button?.imagePosition = .imageLeading
         self.statusItem.button?.toolTip = "mac-xbar — Network Speed Monitor"
+        self.statusItem.button?.action = #selector(statusItemClicked(_:))
+        self.statusItem.button?.target = self
+        self.statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    }
+
+    public var statusButton: NSStatusBarButton? {
+        statusItem.button
+    }
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else {
+            openMenu()
+            return
+        }
+
+        if event.type == .rightMouseUp {
+            openMenu()
+        } else {
+            delegate?.menuEngineDidRequestDashboard(self)
+        }
     }
 
     private var fontSize: CGFloat {
@@ -74,7 +95,9 @@ public final class MenuEngine {
     public func update(items: [MenuItem]) {
         let newItems = items.sorted { $0.order < $1.order }
         let diff = computeDiff(old: currentItems, new: newItems)
-        applyDiff(diff)
+        if !diff.removed.isEmpty || !diff.added.isEmpty || !diff.updated.isEmpty {
+            applyDiff(diff)
+        }
         currentItems = newItems
         stabilizeWidth()
     }
@@ -92,11 +115,7 @@ public final class MenuEngine {
                 ]
             )
             guard button.attributedTitle.string != title else { return }
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.15
-                context.allowsImplicitAnimation = true
-                button.animator().attributedTitle = newAttributed
-            }
+            button.attributedTitle = newAttributed
         }
         stabilizeWidth()
     }
@@ -242,7 +261,9 @@ public final class MenuEngine {
             }
         }
 
-        reorderMenuItems()
+        if !diff.removed.isEmpty || !diff.added.isEmpty {
+            reorderMenuItems()
+        }
     }
 
     // MARK: - NSMenuItem Factory
@@ -319,12 +340,12 @@ public final class MenuEngine {
                 .foregroundColor: NSColor.secondaryLabelColor,
             ]))
             nsItem.attributedTitle = attributed
-        } else if let color = item.color {
+        } else if let colorHex = item.color {
             nsItem.attributedTitle = NSAttributedString(
                 string: item.title,
                 attributes: [
                     .font: itemFont,
-                    .foregroundColor: NSColor(hex: item.color!) ?? resolvedLabelColor,
+                    .foregroundColor: NSColor(hex: colorHex) ?? resolvedLabelColor,
                 ]
             )
         } else {

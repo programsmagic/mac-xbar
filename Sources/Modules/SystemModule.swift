@@ -156,7 +156,7 @@ public final class SystemModule: Module {
         }
         guard result == KERN_SUCCESS else { return 0 }
         let total = cpuInfo.cpu_ticks.0 + cpuInfo.cpu_ticks.1 + cpuInfo.cpu_ticks.2 + cpuInfo.cpu_ticks.3
-        let idle = cpuInfo.cpu_ticks.3
+        let idle = cpuInfo.cpu_ticks.2
         return total > 0 ? Double(total - idle) / Double(total) * 100 : 0
     }
 
@@ -183,25 +183,16 @@ public final class SystemModule: Module {
     }
 
     private func processBatteryInfo() -> (level: Double?, charging: Bool) {
-        return (nil, false)
+        let battery = SystemInfoCollector.shared.collectBattery()
+        return (battery.level, battery.charging)
     }
 
     private func processTemperature() -> Double? {
-        var temp: Double?
-        let matching = IOServiceMatching("IOHIDevice")
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return nil }
-        defer { IOObjectRelease(iterator) }
-        let service = IOIteratorNext(iterator)
-        guard service != 0 else { return nil }
-        defer { IOObjectRelease(service) }
-        var props: Unmanaged<CFMutableDictionary>?
-        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS else { return nil }
-        guard let dictionary = props?.takeRetainedValue() as? [String: Any] else { return nil }
-        if let tempVal = dictionary["Temperature"] as? Double {
-            temp = tempVal
+        let battery = SystemInfoCollector.shared.collectBattery()
+        if let temp = battery.temperature {
+            return temp
         }
-        return temp
+        return nil
     }
 
     private func processFanSpeed() -> Int? {
@@ -240,7 +231,77 @@ public final class SystemModule: Module {
     }
 
     private func processSleepStats() -> SleepStats {
-        return SleepStats(sleepCount: 0, sleepDuration: 0, lastSleep: nil)
+        cachedSleepStats
+    }
+
+    private lazy var cachedSleepStats: SleepStats = {
+        guard let output = runProcess(arguments: ["-c", "pmset -g log | grep -E 'Wake from|Display is turned off' | tail -20"]) else {
+            return SleepStats(sleepCount: 0, sleepDuration: 0, lastSleep: nil)
+        }
+
+        let lines = output.split(separator: "\n").map { String($0) }
+        let wakeEvents = lines.filter { $0.contains("Wake from") }
+        let sleepEvents = lines.filter { $0.contains("Display is turned off") }
+
+        var lastSleep: Date?
+        for line in wakeEvents.reversed() {
+            if let date = parseLogDate(line) {
+                lastSleep = date
+                break
+            }
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        var totalSleep: TimeInterval = 0
+
+        for line in sleepEvents {
+            guard let date = parseLogDate(line), date > startOfToday else { continue }
+            if let wake = firstWakeAfter(date, in: wakeEvents) {
+                totalSleep += wake.timeIntervalSince(date)
+            }
+        }
+
+        return SleepStats(
+            sleepCount: sleepEvents.count,
+            sleepDuration: totalSleep,
+            lastSleep: lastSleep
+        )
+    }()
+
+    private func firstWakeAfter(_ sleepDate: Date, in wakeLines: [String]) -> Date? {
+        for line in wakeLines {
+            if let date = parseLogDate(line), date > sleepDate {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private func parseLogDate(_ line: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let components = line.split(separator: " ").prefix(2).joined(separator: " ")
+        return formatter.date(from: components)
+    }
+
+    private func runProcess(arguments: [String]) -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = arguments
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8)
+        } catch {
+            return nil
+        }
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
