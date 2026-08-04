@@ -167,12 +167,20 @@ public final class NetworkModule: Module {
         cachedWifiRSSI = getWifiRSSI()
     }
 
-    // MARK: - Speed Timer (1-second)
+    // MARK: - Speed Timer (adaptive 1s -> 3s)
+
+    private var speedTickInterval: Double = 1.0
+    private var flatTickCount: Int = 0
 
     private func startSpeedTimer() {
         guard speedTimer == nil else { return }
+        scheduleSpeedTimer(interval: speedTickInterval)
+    }
+
+    private func scheduleSpeedTimer(interval: Double) {
+        speedTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-        timer.schedule(deadline: .now(), repeating: 1.0, leeway: .milliseconds(100))
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(100))
         timer.setEventHandler { [weak self] in
             self?.tickSpeed()
         }
@@ -215,7 +223,26 @@ public final class NetworkModule: Module {
         let dlFormatted = formatSpeedShort(smoothedDL)
         let ulFormatted = formatSpeedShort(smoothedUL)
 
+        updateAdaptiveTickRate()
+
         speedObserver?.networkModule(self, didUpdateSpeed: smoothedDL, upload: smoothedUL, downloadFormatted: dlFormatted, uploadFormatted: ulFormatted)
+    }
+
+    private func updateAdaptiveTickRate() {
+        let active = smoothedDL > 64 * 1024 || smoothedUL > 64 * 1024
+        if active {
+            flatTickCount = 0
+            if speedTickInterval != 1.0 {
+                speedTickInterval = 1.0
+                scheduleSpeedTimer(interval: 1.0)
+            }
+        } else {
+            flatTickCount += 1
+            if flatTickCount >= 4 && speedTickInterval != 3.0 {
+                speedTickInterval = 3.0
+                scheduleSpeedTimer(interval: 3.0)
+            }
+        }
     }
 
     // MARK: - Latency Polling (every 5 seconds)

@@ -68,14 +68,26 @@ struct OverviewView: View {
                 Text("Public IP")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                Text(networkStore.publicIP ?? "Detecting…")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                Spacer()
-                if networkStore.publicIP == nil {
+                if let ip = networkStore.publicIP {
+                    Text(ip)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                    Button {
+                        copyToClipboard(ip)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy Public IP")
+                } else {
+                    Text("Detecting…")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
                     ProgressView()
                         .controlSize(.mini)
                 }
+                Spacer()
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -102,6 +114,11 @@ struct OverviewView: View {
         if score >= 80 { return .green }
         if score >= 50 { return .orange }
         return .red
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @ViewBuilder

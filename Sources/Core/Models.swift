@@ -110,6 +110,10 @@ public struct AppPreferences: Codable {
     public var showUnits: Bool
     public var fixedWidth: Bool
     public var showDisabledModules: Bool
+    public var menuBarLayout: MenuBarLayout
+    public var trafficStyle: TrafficStyle
+    public var badgeStyle: BadgeStyle
+    public var menuBarIcon: MenuBarIcon
     public var updateInterval: TimeInterval
     public var launchAtLogin: Bool
     public var analyticsEnabled: Bool
@@ -130,6 +134,10 @@ public struct AppPreferences: Codable {
         showUnits: Bool = false,
         fixedWidth: Bool = true,
         showDisabledModules: Bool = false,
+        menuBarLayout: MenuBarLayout = .minimal,
+        trafficStyle: TrafficStyle = .monochrome,
+        badgeStyle: BadgeStyle = .off,
+        menuBarIcon: MenuBarIcon = .network,
         updateInterval: TimeInterval = 1.0,
         launchAtLogin: Bool = false,
         analyticsEnabled: Bool = false,
@@ -149,6 +157,10 @@ public struct AppPreferences: Codable {
         self.showUnits = showUnits
         self.fixedWidth = fixedWidth
         self.showDisabledModules = showDisabledModules
+        self.menuBarLayout = menuBarLayout
+        self.trafficStyle = trafficStyle
+        self.badgeStyle = badgeStyle
+        self.menuBarIcon = menuBarIcon
         self.updateInterval = updateInterval
         self.launchAtLogin = launchAtLogin
         self.analyticsEnabled = analyticsEnabled

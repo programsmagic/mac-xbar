@@ -79,9 +79,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
 
     private func setupStatusItem() {
         applyPreferences()
-        menuEngine?.setIcon(NSImage(systemSymbolName: "network", accessibilityDescription: nil))
+        applyMenuBarIcon()
         menuEngine?.setTitle("\u{2014}")
         menuEngine?.setTooltip("mac-xbar — Network Speed Monitor")
+    }
+
+    private func applyMenuBarIcon() {
+        let symbol = PreferencesManager.shared.preferences.menuBarIcon.symbol
+        menuEngine?.setIcon(symbol.map { NSImage(systemSymbolName: $0, accessibilityDescription: nil) } ?? nil)
     }
 
     private func applyPreferences() {
@@ -91,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SchedulerDelegate {
         menuEngine?.fixedWidth = prefs.fixedWidth
         menuEngine?.showArrows = prefs.showArrows
         menuEngine?.compactMode = prefs.compactMode
+        applyMenuBarIcon()
         if scheduler?.isScheduled("__main__") == true,
            scheduler?.scheduledModuleIDs().contains("__main__") == true {
             scheduleMainRefresh()
@@ -272,10 +278,10 @@ extension AppDelegate: NetworkSpeedObserver {
             }
 
             let mode = self.updateAdaptiveMode(download: download, upload: upload)
-            let title = self.formatTitleForMode(mode, dl: dlShortFinal, ul: ulShortFinal, dlFull: downloadFormatted, ulFull: uploadFormatted)
+            let title = self.makeMenuBarTitle(dl: download, ul: upload, dlStr: dlShortFinal, ulStr: ulShortFinal, latency: intel.latency, mode: mode)
             let tip = "Download: \(downloadFormatted)\nUpload: \(uploadFormatted)\nMode: \(mode.displayName)"
 
-            self.menuEngine?.setTitle(title)
+            self.menuEngine?.setAttributedTitle(title.attributed)
             self.menuEngine?.setTooltip(tip)
 
             PreferencesManager.shared.updateNetworkStats(
@@ -344,6 +350,123 @@ extension AppDelegate: NetworkSpeedObserver {
         case .streaming:
             return "▶ \u{2193}\(dl) \u{2191}\(ul)"
         }
+    }
+
+    // MARK: - Premium Menu Bar Title (v3.1.0)
+
+    private func makeMenuBarTitle(dl: Double, ul: Double, dlStr: String, ulStr: String, latency: Double, mode: MenuBarMode) -> (plain: String, attributed: NSAttributedString) {
+        let prefs = PreferencesManager.shared.preferences
+        let dlTok = dlStr
+        let ulTok = ulStr
+        let active = (dl + ul) > 64 * 1024
+
+        let layout: MenuBarLayout
+        if prefs.menuBarLayout == .adaptive {
+            layout = (dl + ul) < 512 * 1024 ? .minimal : .professional
+        } else {
+            layout = prefs.menuBarLayout
+        }
+
+        let dlColor = trafficColor(for: prefs.trafficStyle, download: true, active: active)
+        let ulColor = trafficColor(for: prefs.trafficStyle, download: false, active: active)
+        let accent = NSColor.systemBlue
+
+        switch layout {
+        case .minimal:
+            let plain = "\u{21E3}\(dlTok) \u{21E1}\(ulTok)"
+            let attr = NSMutableAttributedString()
+            attr.append(.init(string: "\u{21E3}", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: dlTok, attributes: [.foregroundColor: dlColor]))
+            attr.append(.init(string: " ", attributes: [:] ))
+            attr.append(.init(string: "\u{21E1}", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: ulTok, attributes: [.foregroundColor: ulColor]))
+            return (plain, attr)
+
+        case .native:
+            let down = "\(dlTok)\u{2193}"
+            let up = "\(ulTok)\u{2191}"
+            let plain = "\u{1F310} \(down) \(up)"
+            let attr = NSMutableAttributedString()
+            attr.append(.init(string: "\u{1F310} ", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: down, attributes: [.foregroundColor: dlColor]))
+            attr.append(.init(string: " ", attributes: [:]))
+            attr.append(.init(string: up, attributes: [.foregroundColor: ulColor]))
+            return (plain, attr)
+
+        case .professional:
+            let lat = Self.latencyToken(latency)
+            let plain = "Wi\u{2011}Fi \u{21E3}\(dlTok) \u{21E1}\(ulTok) \(lat)"
+            let attr = NSMutableAttributedString()
+            attr.append(.init(string: "Wi\u{2011}Fi ", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: "\u{21E3}\(dlTok) ", attributes: [.foregroundColor: dlColor]))
+            attr.append(.init(string: "\u{21E1}\(ulTok) ", attributes: [.foregroundColor: ulColor]))
+            attr.append(.init(string: lat, attributes: [.foregroundColor: accent]))
+            return (plain, attr)
+
+        case .graph:
+            let spark = Self.sparkBar(dl: dl)
+            let plain = "\(spark) \u{21E3}\(dlTok)"
+            let attr = NSMutableAttributedString()
+            attr.append(.init(string: spark, attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: " \u{21E3}\(dlTok)", attributes: [.foregroundColor: dlColor]))
+            return (plain, attr)
+
+        case .badge:
+            let (openB, closeB) = badgeBrackets(for: prefs.badgeStyle)
+            let plain = "\(openB)D \(dlTok)\(closeB) \(openB)U \(ulTok)\(closeB)"
+            let attr = NSMutableAttributedString()
+            attr.append(.init(string: "\(openB)D ", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: dlTok, attributes: [.foregroundColor: dlColor]))
+            attr.append(.init(string: "\(closeB) ", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: "\(openB)U ", attributes: [.foregroundColor: accent]))
+            attr.append(.init(string: ulTok, attributes: [.foregroundColor: ulColor]))
+            attr.append(.init(string: closeB, attributes: [.foregroundColor: accent]))
+            return (plain, attr)
+
+        case .adaptive:
+            return makeMenuBarTitle(dl: dl, ul: ul, dlStr: dlStr, ulStr: ulStr, latency: latency, mode: mode)
+        }
+    }
+
+    private func badgeBrackets(for style: BadgeStyle) -> (open: String, close: String) {
+        switch style {
+        case .off: return ("[", "]")
+        case .subtle: return ("⟨", "⟩")
+        case .filled: return ("«", "»")
+        }
+    }
+
+    private func trafficColor(for style: TrafficStyle, download: Bool, active: Bool) -> NSColor {
+        switch style {
+        case .monochrome:
+            return NSColor.labelColor
+        case .accent:
+            return NSColor.systemBlue
+        case .colored:
+            return download ? NSColor.systemGreen : NSColor.systemOrange
+        case .adaptive:
+            guard active else { return NSColor.labelColor }
+            return download ? NSColor.systemGreen : NSColor.systemOrange
+        case .highContrast:
+            return download ? NSColor.systemGreen : NSColor.systemOrange
+        }
+    }
+
+    private static func latencyToken(_ latency: Double) -> String {
+        if latency < 0 { return "\u{2014}" }
+        let ms = Int(latency)
+        let raw = "\(ms)ms"
+        return String(repeating: "\u{2007}", count: max(0, 5 - raw.count)) + raw
+    }
+
+    private static let sparkChars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    private static func sparkBar(dl: Double) -> String {
+        let maxRef: Double = 50 * 1024 * 1024
+        let frac = min(max(dl / maxRef, 0.0), 1.0)
+        let active = frac == 0 ? 0 : max(1, Int(ceil(frac * 4)))
+        let level = min(sparkChars.count - 1, Int(frac * Double(sparkChars.count - 1)))
+        let ch = sparkChars[level]
+        return (0..<4).map { $0 < active ? ch : " " }.joined()
     }
 
     static func barSpeed(_ bytesPerSecond: Double, showUnits: Bool) -> String {

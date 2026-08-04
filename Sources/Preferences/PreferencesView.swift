@@ -173,6 +173,71 @@ struct MenuBarSettingsView: View {
         Form {
             Section {
                 HStack {
+                    Text("Menu Bar Icon")
+                    Spacer()
+                    Picker("", selection: $prefs.preferences.menuBarIcon) {
+                        ForEach(MenuBarIcon.allCases, id: \.self) { icon in
+                            Label(icon.title, systemImage: icon.symbol ?? "square.dashed")
+                                .tag(icon)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
+                }
+            } header: {
+                Text("Live Icon")
+            } footer: {
+                Text("Choose the icon shown in the menu bar alongside live speeds.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Text("Layout")
+                    Spacer()
+                    Picker("", selection: $prefs.preferences.menuBarLayout) {
+                        ForEach(MenuBarLayout.allCases, id: \.self) { layout in
+                            Text("\(layout.title) — \(layout.example)").tag(layout)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 220)
+                }
+
+                HStack {
+                    Text("Traffic Color")
+                    Spacer()
+                    Picker("", selection: $prefs.preferences.trafficStyle) {
+                        ForEach(TrafficStyle.allCases, id: \.self) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
+                }
+
+                HStack {
+                    Text("Badge Style")
+                    Spacer()
+                    Picker("", selection: $prefs.preferences.badgeStyle) {
+                        ForEach(BadgeStyle.allCases, id: \.self) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
+                }
+            } header: {
+                Text("Display Mode")
+            } footer: {
+                Text("Layout changes how speeds appear. Adaptive switches between Minimal and Professional based on traffic.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
                     Image(systemName: "gauge.badge.automatic")
                     Text("Adaptive Mode")
                     Spacer()
@@ -183,7 +248,7 @@ struct MenuBarSettingsView: View {
                 Toggle("Fixed Width (prevents jitter)", isOn: $prefs.preferences.fixedWidth)
                     .toggleStyle(.switch)
             } header: {
-                Text("Display Mode")
+                Text("Behavior")
             }
 
             Section {

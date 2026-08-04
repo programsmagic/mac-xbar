@@ -25,6 +25,48 @@ struct MetricRow: View {
     }
 }
 
+struct CopyableMetricRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    var color: Color = .secondary
+    var copyValue: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundColor(color)
+                .frame(width: 16)
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 12, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            if !value.isEmpty, value != "—" {
+                Button {
+                    copyToClipboard(copyValue ?? value)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(color)
+                }
+                .buttonStyle(.plain)
+                .help("Copy \(label)")
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
 struct ProgressBar: View {
     let value: Double
     var color: Color = .accentColor

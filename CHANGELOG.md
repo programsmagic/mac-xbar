@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.1.0] - 2026-08-04
+
+### Added
+- Premium menu-bar layouts: **Minimal** (default `⇣7.3 ⇡1.7`), Native, Professional, Graph (sparkline), Badge, and Adaptive — selectable in **Menu Bar** settings.
+- Traffic color styles: Monochrome, Accent, Download/Upload Colors, Adaptive, High Contrast — per-direction coloring of the down/up glyphs.
+- Badge styles: Off, Subtle Capsule, Filled Capsule — bracket styling for the Badge layout.
+- Adaptive polling: the live speed tick backs off from 1 s to 3 s when traffic is flat.
+- **Changeable live menu-bar icon**: pick from Network, Wi-Fi, Speedometer, Gauge, Up/Down Arrows, Bolt, Globe, Radar, or None in **Menu Bar** settings (applies live, no relaunch).
+- **Copy buttons next to Public IP** in the dashboard Overview hero and Network tab (one-click copy to clipboard).
+
+### Fixed
+- Menu-bar title renders compact `⇣7.3 ⇡1.7` (⇣⇡ glyphs, no space to the number, monospaced digits, single separator) instead of `↓ 7.3 ↑ 1.7`.
+- `MenuEngine.update` no longer clears the menu on idle ticks (early-returns when no module produced new items), so a slower menu refresh can't blank the dropdown.
+
+### Performance
+- Idle CPU cut from ~1.1% to ~0.3–0.5%: non-animated, short-circuited title set on unchanged strings + adaptive speed-timer backoff + decoupled 5 s dropdown rebuild.
+
 ## [3.0.0] - 2026-08-04
 
 ### Added

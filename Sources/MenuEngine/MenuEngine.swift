@@ -120,6 +120,21 @@ public final class MenuEngine {
         stabilizeWidth()
     }
 
+    public func setAttributedTitle(_ attributed: NSAttributedString) {
+        guard let button = statusItem.button else { return }
+        let string = attributed.string
+        if string.isEmpty {
+            button.attributedTitle = NSAttributedString(string: " ", attributes: [.font: speedFont])
+        } else {
+            guard button.attributedTitle.string != string else { return }
+            let mutable = NSMutableAttributedString(attributedString: attributed)
+            let fullRange = NSRange(location: 0, length: mutable.length)
+            mutable.addAttribute(.font, value: speedFont, range: fullRange)
+            button.attributedTitle = mutable
+        }
+        stabilizeWidth()
+    }
+
     public func setIcon(_ image: NSImage?) {
         image?.isTemplate = true
         statusItem.button?.image = image

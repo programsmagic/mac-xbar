@@ -32,3 +32,5 @@ coverage/
 .xcode/
 swiftpm/
 Package.resolved
+mac-xbar
+*.dmg

@@ -74,10 +74,12 @@ struct NetworkDashboardView: View {
                     value: String(format: "%.1f%%", intel.packetLoss),
                     color: intel.packetLoss > 2 ? .red : .green
                 )
-                MetricRow(
+                CopyableMetricRow(
                     icon: "arrow.up.right.circle",
                     label: "Public IP",
-                    value: intel.publicIP ?? "—"
+                    value: intel.publicIP ?? "—",
+                    color: .blue,
+                    copyValue: intel.publicIP
                 )
             }
         }
@@ -142,7 +144,13 @@ struct NetworkDashboardView: View {
                     )
                 }
                 MetricRow(icon: "network", label: "Local IP", value: net.localIP ?? "—")
-                MetricRow(icon: "globe", label: "Public IP", value: networkStore.publicIP ?? networkStore.intelligence?.publicIP ?? "—")
+                CopyableMetricRow(
+                    icon: "globe",
+                    label: "Public IP",
+                    value: networkStore.publicIP ?? networkStore.intelligence?.publicIP ?? "—",
+                    color: .blue,
+                    copyValue: networkStore.publicIP ?? networkStore.intelligence?.publicIP
+                )
             }
         }
     }
