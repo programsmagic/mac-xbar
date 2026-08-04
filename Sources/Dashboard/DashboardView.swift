@@ -199,7 +199,7 @@ struct DashboardView: View {
     }
 
     private func openAppSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.sendAction(#selector(NSApplication.showSettingsWindow(_:)), to: NSApp, from: nil)
     }
 
     private func showToast(_ message: String) {
