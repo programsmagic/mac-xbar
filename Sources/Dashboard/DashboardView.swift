@@ -103,6 +103,8 @@ struct DashboardView: View {
         .padding(.horizontal, 18)
     }
 
+    @Environment(\.openSettings) private var openSettings
+
     private var footer: some View {
         VStack(spacing: 8) {
             Button {
@@ -199,7 +201,7 @@ struct DashboardView: View {
     }
 
     private func openAppSettings() {
-        NSApp.sendAction(#selector(NSApplication.showSettingsWindow(_:)), to: NSApp, from: nil)
+        openSettings()
     }
 
     private func showToast(_ message: String) {
