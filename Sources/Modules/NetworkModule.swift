@@ -194,8 +194,8 @@ public final class NetworkModule: Module {
         let elapsed = now.timeIntervalSince(previousSpeedTimestamp)
         guard elapsed > 0.5 else { return }
 
-        let rxDelta = UInt64(Int64(stats.rxBytes) &- Int64(previousRxBytes))
-        let txDelta = UInt64(Int64(stats.txBytes) &- Int64(previousTxBytes))
+        let rxDelta: UInt64 = stats.rxBytes >= previousRxBytes ? stats.rxBytes - previousRxBytes : 0
+        let txDelta: UInt64 = stats.txBytes >= previousTxBytes ? stats.txBytes - previousTxBytes : 0
 
         let dlSpeed = Double(rxDelta) / elapsed
         let ulSpeed = Double(txDelta) / elapsed
