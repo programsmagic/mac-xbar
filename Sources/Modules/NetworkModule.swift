@@ -43,6 +43,11 @@ public final class NetworkModule: Module {
     private var cachedIPv6: String?
     private var cachedInterfaceName: String = ""
     private var cachedWifiRSSI: Int?
+    private var cachedPHYRate: Double?
+    private var cachedChannel: Int?
+    private var cachedLinkSpeed: Double?
+    private var cachedGateway: String?
+    private var cachedDNSServer: String?
 
     private var dlHistory: [Double] = []
     private var ulHistory: [Double] = []
@@ -85,6 +90,11 @@ public final class NetworkModule: Module {
         public var localIP: String
         public var ipv6: String?
         public var wifiRSSI: Int?
+        public var phyRate: Double?
+        public var channel: Int?
+        public var linkSpeed: Double?
+        public var gateway: String?
+        public var dnsServer: String?
         public var interfaceType: String
         public var interfaceName: String
         public var isConnected: Bool
@@ -109,6 +119,7 @@ public final class NetworkModule: Module {
         startDailyReset()
 
         cachedLocalIP = getLocalIP()
+        cachedIPv6 = getIPv6()
     }
 
     public func refresh() async throws -> ModuleOutput {
@@ -165,6 +176,12 @@ public final class NetworkModule: Module {
 
         cachedLocalIP = getLocalIP()
         cachedWifiRSSI = getWifiRSSI()
+        cachedPHYRate = getWifiPHYRate()
+        cachedChannel = getWifiChannel()
+        cachedLinkSpeed = getWifiLinkSpeed()
+        cachedGateway = getGateway()
+        cachedDNSServer = getDNSServer()
+        cachedIPv6 = getIPv6()
     }
 
     // MARK: - Speed Timer (adaptive 1s -> 3s)
@@ -496,6 +513,31 @@ public final class NetworkModule: Module {
         return ""
     }
 
+    private func getIPv6() -> String? {
+        var ifap: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifap) == 0, let firstAddr = ifap else { return nil }
+        defer { freeifaddrs(ifap) }
+        var ptr: UnsafeMutablePointer<ifaddrs> = firstAddr
+        while true {
+            let name = String(cString: ptr.pointee.ifa_name)
+            let addr = ptr.pointee.ifa_addr
+            guard let addr = addr, addr.pointee.sa_family == UInt8(AF_INET6) else {
+                guard let next = ptr.pointee.ifa_next else { break }
+                ptr = next
+                continue
+            }
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(addr, socklen_t(addr.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST)
+            let ip = String(cString: hostname)
+            if !ip.hasPrefix("fe80") && !ip.hasPrefix("::1") && !ip.isEmpty {
+                return ip
+            }
+            guard let next = ptr.pointee.ifa_next else { break }
+            ptr = next
+        }
+        return nil
+    }
+
     // MARK: - Wi-Fi RSSI (IOKit)
 
     private func getWifiRSSI() -> Int? {
@@ -515,6 +557,108 @@ public final class NetworkModule: Module {
             service = IOIteratorNext(iterator)
         }
         return nil
+    }
+
+    // MARK: - Wi-Fi PHY Rate, Channel, Link Speed (IOKit)
+
+    private func getWifiPHYRate() -> Double? {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IO80211Interface"), &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer { IOObjectRelease(service) }
+            if let rate = IORegistryEntryCreateCFProperty(service, "PHYRate" as CFString, nil, 0)?.takeRetainedValue() as? Double {
+                return rate
+            }
+            service = IOIteratorNext(iterator)
+        }
+        return nil
+    }
+
+    private func getWifiChannel() -> Int? {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IO80211Interface"), &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer { IOObjectRelease(service) }
+            if let channel = IORegistryEntryCreateCFProperty(service, "Channel" as CFString, nil, 0)?.takeRetainedValue() as? Int {
+                return channel
+            }
+            service = IOIteratorNext(iterator)
+        }
+        return nil
+    }
+
+    private func getWifiLinkSpeed() -> Double? {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IO80211Interface"), &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer { IOObjectRelease(service) }
+            if let speed = IORegistryEntryCreateCFProperty(service, "LinkSpeed" as CFString, nil, 0)?.takeRetainedValue() as? Double {
+                return speed
+            }
+            service = IOIteratorNext(iterator)
+        }
+        return nil
+    }
+
+    // MARK: - Gateway & DNS
+
+    private func getGateway() -> String? {
+        var gateway: String?
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/sbin/route")
+        task.arguments = ["-n", "get", "default"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        try? task.run()
+        task.waitUntilExit()
+        if task.terminationStatus == 0,
+           let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+            for line in output.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("gateway:") {
+                    gateway = trimmed.replacingOccurrences(of: "gateway:", with: "").trimmingCharacters(in: .whitespaces)
+                    break
+                }
+            }
+        }
+        return gateway
+    }
+
+    private func getDNSServer() -> String? {
+        var dnsServer: String?
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/scutil")
+        task.arguments = ["--dns"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        try? task.run()
+        task.waitUntilExit()
+        if task.terminationStatus == 0,
+           let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+            for line in output.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("nameserver") {
+                    let parts = trimmed.components(separatedBy: .whitespaces)
+                    if parts.count >= 2 {
+                        dnsServer = parts[1]
+                        break
+                    }
+                }
+            }
+        }
+        return dnsServer
     }
 
     // MARK: - Intelligence
@@ -550,6 +694,11 @@ public final class NetworkModule: Module {
             localIP: cachedLocalIP,
             ipv6: cachedIPv6,
             wifiRSSI: cachedWifiRSSI,
+            phyRate: cachedPHYRate,
+            channel: cachedChannel,
+            linkSpeed: cachedLinkSpeed,
+            gateway: cachedGateway,
+            dnsServer: cachedDNSServer,
             interfaceType: interfaceType,
             interfaceName: cachedInterfaceName,
             isConnected: isConnected,
@@ -770,12 +919,63 @@ public final class NetworkModule: Module {
                     metadata: ["section": "diagnostics"]
                 ))
             }
+            if let phyRate = intel.phyRate {
+                items.append(MenuItem(
+                    title: "PHY Rate: \(String(format: "%.0f", phyRate)) Mbps",
+                    icon: "wifi",
+                    order: 54,
+                    metadata: ["section": "diagnostics"]
+                ))
+            }
+            if let channel = intel.channel {
+                items.append(MenuItem(
+                    title: "Channel: \(channel)",
+                    icon: "radio",
+                    order: 55,
+                    metadata: ["section": "diagnostics"]
+                ))
+            }
+            if let linkSpeed = intel.linkSpeed {
+                items.append(MenuItem(
+                    title: "Link Speed: \(String(format: "%.0f", linkSpeed)) Mbps",
+                    icon: "arrow.left.arrow.right",
+                    order: 56,
+                    metadata: ["section": "diagnostics"]
+                ))
+            }
+        }
+
+        if let gateway = intel.gateway {
+            items.append(MenuItem(
+                title: "Gateway: \(gateway)",
+                icon: "network",
+                order: 57,
+                metadata: ["section": "diagnostics"]
+            ))
+        }
+
+        if let dns = intel.dnsServer {
+            items.append(MenuItem(
+                title: "DNS: \(dns)",
+                icon: "globe",
+                order: 58,
+                metadata: ["section": "diagnostics"]
+            ))
+        }
+
+        if let ipv6 = intel.ipv6, !ipv6.isEmpty {
+            items.append(MenuItem(
+                title: "IPv6: \(ipv6)",
+                icon: "globe",
+                order: 59,
+                metadata: ["section": "diagnostics"]
+            ))
         }
 
         items.append(MenuItem(
             title: "Interface: \(intel.interfaceType)",
             icon: "network",
-            order: 54,
+            order: 60,
             metadata: ["section": "diagnostics"]
         ))
 
@@ -783,7 +983,7 @@ public final class NetworkModule: Module {
             title: "Status: \(intel.isConnected ? "Connected" : "Disconnected")",
             icon: intel.isConnected ? "checkmark.circle.fill" : "xmark.circle.fill",
             color: intel.isConnected ? "#34C759" : "#FF3B30",
-            order: 55,
+            order: 61,
             metadata: ["section": "diagnostics"]
         ))
 
